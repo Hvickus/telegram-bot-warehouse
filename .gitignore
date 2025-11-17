@@ -1,0 +1,31 @@
+# Зависимости
+node_modules/
+package-lock.json
+
+# Переменные окружения (секреты!)
+.env
+.env.local
+.env.*.local
+
+# Сессии бота
+session_db.json
+
+# Логи
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Временные файлы
+*.tmp
+*.temp
+
