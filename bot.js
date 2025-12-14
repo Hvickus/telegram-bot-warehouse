@@ -24,7 +24,7 @@ bot.start(async (ctx) => {
   });
 });
 
-const generateAdvancedStockReport = require("./utils/generateExcelReportAdvanced");
+const generateAdvancedStockReport = require("./utils/generateExcelReport");
 
 bot.command("advreport", async (ctx) => {
   try {
@@ -39,7 +39,6 @@ bot.command("advreport", async (ctx) => {
   }
 });
 
-require("./utils/generateExcelReportAdvanced")(bot);
 require("./handlers/navigation")(bot);
 require("./handlers/products/list")(bot);
 require("./handlers/products/view")(bot);
