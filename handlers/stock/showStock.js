@@ -32,16 +32,22 @@ module.exports = function registerStockPagination(bot) {
     });
 
     // Формируем кнопки навигации
-    const buttons = [];
-    if (currentPage > 1) {
-      buttons.push(Markup.button.callback("⬅️ Назад", `stock_page_${offset - PAGE_SIZE}`));
-    }
-    if (currentPage < totalPages) {
-      buttons.push(Markup.button.callback("➡️ Вперёд", `stock_page_${offset + PAGE_SIZE}`));
-    }
+    const navButtons = [];
+    if (page > 1)
+      navButtons.push(
+        Markup.button.callback("⬅️ Назад", `products_page_${page - 1}`)
+      );
+    if (page < totalPages)
+      navButtons.push(
+        Markup.button.callback("➡️ Вперед", `products_page_${page + 1}`)
+      );
+    if (navButtons.length > 0) buttons.push(navButtons);
+
+    // Добавляем кнопку "Назад в меню" внизу
+    buttons.push([Markup.button.callback("🔙 Главное меню", "back_main")]);
 
     const keyboard = buttons.length
-      ? Markup.inlineKeyboard(buttons.map(btn => [btn])) // каждая кнопка в отдельной строке
+      ? Markup.inlineKeyboard(buttons.map((btn) => [btn])) // каждая кнопка в отдельной строке
       : undefined;
 
     // Редактируем сообщение, если это callback_query, иначе отправляем новое
