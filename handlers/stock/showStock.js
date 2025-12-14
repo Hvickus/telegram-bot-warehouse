@@ -11,8 +11,8 @@ module.exports = function registerStockPagination(bot) {
 
     const offset = (page - 1) * ITEMS_PER_PAGE;
 
-    // Получаем общее количество товаров на складе
-    const countRes = await pool.query("SELECT COUNT(*) AS total FROM stock");
+    // Общее количество товаров в представлении
+    const countRes = await pool.query(`SELECT COUNT(*) AS total FROM vw_stock`);
     const totalItems = parseInt(countRes.rows[0].total, 10);
     const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
 
@@ -29,23 +29,20 @@ module.exports = function registerStockPagination(bot) {
     if (page < 1) page = 1;
     if (page > totalPages) page = totalPages;
 
-    // Получаем товары для текущей страницы
+    // Данные из представления
     const res = await pool.query(
-      `SELECT s.product_id, p.name, s.quantity
-       FROM stock s
-       JOIN products p ON p.id = s.product_id
-       ORDER BY p.id
+      `SELECT product_name AS name, quantity
+       FROM vw_stock
+       ORDER BY product_id
        LIMIT $1 OFFSET $2`,
       [ITEMS_PER_PAGE, offset]
     );
 
-    // Формируем текст сообщения
     let message = `📊 *Текущие остатки на складе* (Страница ${page} из ${totalPages})\n\n`;
     res.rows.forEach((r, i) => {
       message += `${offset + i + 1}. ${r.name} — *${r.quantity}*\n`;
     });
 
-    // Кнопки навигации
     const buttons = [];
     const navButtons = [];
     if (page > 1)
@@ -58,7 +55,6 @@ module.exports = function registerStockPagination(bot) {
       );
     if (navButtons.length) buttons.push(navButtons);
 
-    // Кнопка "Назад в меню остатков"
     buttons.push([Markup.button.callback("🔙 Назад", "menu_stock")]);
 
     await replyOrEdit(
@@ -68,12 +64,10 @@ module.exports = function registerStockPagination(bot) {
     );
   }
 
-  // Старт просмотра остатков
   bot.action("show_stock", async (ctx) => {
     await sendStockPage(ctx, 1);
   });
 
-  // Пагинация
   bot.action(/stock_page_(\d+)/, async (ctx) => {
     const page = parseInt(ctx.match[1], 10);
     await sendStockPage(ctx, page);
