@@ -2,46 +2,73 @@ const { Markup } = require("telegraf");
 const pool = require("../../db");
 const replyOrEdit = require("../../utils/replyOrEdit");
 const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
-const productsMenu = require("../../menus/productsMenu");
 
-module.exports = function (bot) {
-  // Меню Приход товара
-  bot.action("income_start", async (ctx) => {
+const ITEMS_PER_PAGE = 10;
+
+module.exports = function registerIncome(bot) {
+  // Отправка страницы товаров для прихода
+  async function sendIncomeProductPage(ctx, page = 1) {
     await safeAnswerCbQuery(ctx);
 
-    try {
-      // Получаем список товаров для выбора
-      const res = await pool.query(`SELECT id, name FROM products ORDER BY id`);
+    const offset = (page - 1) * ITEMS_PER_PAGE;
 
-      if (res.rows.length === 0) {
-        return replyOrEdit(
-          ctx,
-          "❗ Нет товаров для прихода. Сначала добавьте товар.",
-          productsMenu()
-        );
-      }
+    // Получаем общее количество товаров
+    const countRes = await pool.query(`SELECT COUNT(*) AS total FROM products`);
+    const totalItems = parseInt(countRes.rows[0].total, 10);
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
 
-      const buttons = res.rows.map((p) => [
-        Markup.button.callback(p.name, `income_${p.id}`),
-      ]);
-      buttons.push([Markup.button.callback("🔙 Назад", "back_main")]);
-
-      await replyOrEdit(
-        ctx,
-        "📥 Выберите товар для прихода:",
-        Markup.inlineKeyboard(buttons)
-      );
-    } catch (err) {
-      console.error("Ошибка income_start:", err);
-      await replyOrEdit(ctx, "Ошибка при загрузке списка товаров.");
+    if (totalPages === 0) {
+      return replyOrEdit(ctx, "❗ Нет товаров для прихода.");
     }
+
+    if (page < 1) page = 1;
+    if (page > totalPages) page = totalPages;
+
+    // Получаем товары для текущей страницы
+    const res = await pool.query(
+      `SELECT id, name FROM products ORDER BY id LIMIT $1 OFFSET $2`,
+      [ITEMS_PER_PAGE, offset]
+    );
+
+    // Кнопки товаров
+    const buttons = res.rows.map((p) => [
+      Markup.button.callback(p.name, `income_${p.id}`),
+    ]);
+
+    // Кнопки навигации
+    const navButtons = [];
+    if (page > 1)
+      navButtons.push(
+        Markup.button.callback("⬅️ Назад", `income_page_${page - 1}`)
+      );
+    if (page < totalPages)
+      navButtons.push(
+        Markup.button.callback("➡️ Вперед", `income_page_${page + 1}`)
+      );
+    if (navButtons.length) buttons.push(navButtons);
+
+    // Кнопка "Назад"
+    buttons.push([Markup.button.callback("🔙 Главное меню", "back_main")]);
+
+    const text = `📥 Выберите товар для прихода:\nСтраница ${page} из ${totalPages}`;
+    await replyOrEdit(ctx, text, Markup.inlineKeyboard(buttons));
+  }
+
+  // Старт выбора товара
+  bot.action("income_start", async (ctx) => {
+    await sendIncomeProductPage(ctx, 1);
   });
 
-  // Выбор товара для прихода
-  bot.action(/income_(.+)/, async (ctx) => {
-    await safeAnswerCbQuery(ctx);
+  // Пагинация
+  bot.action(/income_page_(\d+)/, async (ctx) => {
+    const page = parseInt(ctx.match[1], 10);
+    await sendIncomeProductPage(ctx, page);
+  });
 
-    const productId = Number(ctx.match[1]);
+  // Выбор конкретного товара
+  bot.action(/income_(\d+)/, async (ctx) => {
+    await safeAnswerCbQuery(ctx);
+    const productId = parseInt(ctx.match[1], 10);
     ctx.session = ctx.session || {};
     ctx.session.flow = "income_product";
     ctx.session.productId = productId;
@@ -49,7 +76,7 @@ module.exports = function (bot) {
     await replyOrEdit(ctx, "Введите количество прихода (целое число):");
   });
 
-  // Ввод количества
+  // Ввод количества прихода
   bot.on("text", async (ctx, next) => {
     const s = ctx.session;
     if (!s || s.flow !== "income_product") return next();
@@ -62,20 +89,17 @@ module.exports = function (bot) {
     }
 
     try {
-      // Проверяем, есть ли запись в stock
       const stockRes = await pool.query(
         `SELECT quantity FROM stock WHERE product_id = $1`,
         [s.productId]
       );
 
       if (stockRes.rows.length === 0) {
-        // Если нет записи, создаём новую
         await pool.query(
           `INSERT INTO stock (product_id, quantity) VALUES ($1, $2)`,
           [s.productId, qty]
         );
       } else {
-        // Иначе увеличиваем существующий остаток
         await pool.query(
           `UPDATE stock SET quantity = quantity + $1 WHERE product_id = $2`,
           [qty, s.productId]
@@ -87,10 +111,8 @@ module.exports = function (bot) {
         [s.productId, qty]
       );
 
-      if (ctx.session) {
-        delete ctx.session.flow;
-        delete ctx.session.productId;
-      }
+      delete ctx.session.flow;
+      delete ctx.session.productId;
 
       await ctx.reply(
         `✅ Остаток увеличен на ${qty} единиц.`,
@@ -99,11 +121,9 @@ module.exports = function (bot) {
           [Markup.button.callback("🏠 Главное меню", "back_main")],
         ])
       );
-      return;
     } catch (err) {
       console.error("Ошибка прихода товара:", err);
       await ctx.reply("Ошибка при обновлении остатков.");
-      return;
     }
   });
 };

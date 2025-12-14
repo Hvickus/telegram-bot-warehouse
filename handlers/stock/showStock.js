@@ -1,43 +1,31 @@
 const { Markup } = require("telegraf");
 const pool = require("../../db");
 
-const PAGE_SIZE = 10;
+const ITEMS_PER_PAGE = 10;
 
 module.exports = function registerStockPagination(bot) {
   async function sendStockPage(ctx, page = 1) {
-    const offset = (page - 1) * PAGE_SIZE;
+    const offset = (page - 1) * ITEMS_PER_PAGE;
 
-    // Общее количество товаров
-    const countRes = await pool.query("SELECT COUNT(*) FROM stock");
-    const total = parseInt(countRes.rows[0].count, 10);
-    const totalPages = Math.ceil(total / PAGE_SIZE);
+    // Общее количество товаров на складе
+    const countRes = await pool.query("SELECT COUNT(*) AS total FROM stock");
+    const totalItems = parseInt(countRes.rows[0].total, 10);
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
 
-    // Товары для текущей страницы
+    if (totalPages === 0) return ctx.reply("❗ На складе нет товаров.");
+
+    if (page < 1) page = 1;
+    if (page > totalPages) page = totalPages;
+
+    // Получаем товары для текущей страницы
     const res = await pool.query(
       `SELECT s.product_id, p.name, s.quantity
        FROM stock s
        JOIN products p ON p.id = s.product_id
        ORDER BY p.id
        LIMIT $1 OFFSET $2`,
-      [PAGE_SIZE, offset]
+      [ITEMS_PER_PAGE, offset]
     );
-
-    if (!res.rows.length) {
-      const msg = "На складе нет товаров.";
-      if (ctx.session?.lastStockMessageId) {
-        await ctx.telegram.editMessageText(
-          ctx.chat.id,
-          ctx.session.lastStockMessageId,
-          undefined,
-          msg
-        );
-      } else {
-        const sent = await ctx.reply(msg);
-        ctx.session = ctx.session || {};
-        ctx.session.lastStockMessageId = sent.message_id;
-      }
-      return;
-    }
 
     // Формируем текст
     let text = `📊 *Текущие остатки на складе* (Страница ${page} из ${totalPages}):\n\n`;
@@ -63,7 +51,7 @@ module.exports = function registerStockPagination(bot) {
 
     const keyboard = Markup.inlineKeyboard(buttons);
 
-    // Отправка или редактирование сообщения
+    // Редактируем сообщение, если оно уже есть, иначе отправляем новое
     if (
       ctx.session?.lastStockMessageId &&
       ctx.updateType === "callback_query"
