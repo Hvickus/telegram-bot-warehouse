@@ -1,3 +1,4 @@
+// mainMenu.js
 const { Markup } = require("telegraf");
 const pool = require("../db");
 
@@ -11,6 +12,7 @@ module.exports = async function mainMenu(ctx) {
     [Markup.button.callback("📈 Excel отчёт", "excel_report")],
   ];
 
+  // Проверяем роль пользователя
   const res = await pool.query(
     "SELECT role FROM bot_users WHERE telegram_id = $1",
     [ctx.from.id]

@@ -1,3 +1,4 @@
+// navigation.js
 const mainMenu = require("../menus/mainMenu");
 const productsMenu = require("../menus/productsMenu");
 const stockMenu = require("./stock/stockMenu");
@@ -6,17 +7,17 @@ const outcomeMenu = require("./outcome/outcomeMenu");
 const reportsMenu = require("./reports/menu");
 const safeAnswerCbQuery = require("../utils/safeAnswerCbQuery");
 const safeEditMessage = require("../utils/safeEditMessage");
+const rolesMenu = require("../menus/rolesMenu");
 
 module.exports = function (bot) {
+  // Главное меню
   bot.action("back_main", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     const keyboard = await mainMenu(ctx);
-
-    await safeEditMessage(ctx, "Главное меню:", {
-      reply_markup: keyboard.reply_markup,
-    });
+    await safeEditMessage(ctx, "Главное меню:", { reply_markup: keyboard });
   });
 
+  // Меню товаров
   bot.action("menu_products", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📦 Меню товаров:", {
@@ -24,6 +25,7 @@ module.exports = function (bot) {
     });
   });
 
+  // Меню остатков
   bot.action("menu_stock", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📦 Меню остатков:", {
@@ -31,6 +33,7 @@ module.exports = function (bot) {
     });
   });
 
+  // Меню прихода
   bot.action("menu_income", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📥 Меню прихода:", {
@@ -38,6 +41,7 @@ module.exports = function (bot) {
     });
   });
 
+  // Меню списания
   bot.action("menu_outcome", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📤 Меню списания:", {
@@ -45,10 +49,20 @@ module.exports = function (bot) {
     });
   });
 
+  // Меню отчётов
   bot.action("menu_reports", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📊 Меню отчётов:", {
       reply_markup: reportsMenu().reply_markup,
+    });
+  });
+
+  // Меню ролей
+  bot.action("roles_menu", async (ctx) => {
+    await safeAnswerCbQuery(ctx);
+    const keyboard = await rolesMenu(ctx);
+    await safeEditMessage(ctx, "👥 Управление администраторами:", {
+      reply_markup: keyboard,
     });
   });
 };
