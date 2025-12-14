@@ -1,7 +1,7 @@
 const { Markup } = require("telegraf");
 const pool = require("../db");
 
-const MAIN_ADMIN_ID = 1111944400; // <-- твой Telegram ID
+const MAIN_ADMIN_ID = 1111944400; // <-- ваш Telegram ID
 
 module.exports = async function rolesMenu(ctx) {
   const res = await pool.query(
@@ -14,6 +14,7 @@ module.exports = async function rolesMenu(ctx) {
   const buttons = res.rows.map((user) => {
     const username = user.username ? `@${user.username}` : user.telegram_id;
     const isMain = user.telegram_id === MAIN_ADMIN_ID;
+
     return [
       Markup.button.callback(username, `admin_${user.telegram_id}`),
       ...(isMain
@@ -22,10 +23,12 @@ module.exports = async function rolesMenu(ctx) {
     ];
   });
 
+  // Добавить администратора
   buttons.push([
     Markup.button.callback("➕ Добавить администратора", "add_admin"),
   ]);
+  // Назад
   buttons.push([Markup.button.callback("🔙 Назад", "back_main")]);
 
-  return { reply_markup: Markup.inlineKeyboard(buttons) };
+  return Markup.inlineKeyboard(buttons); // возвращаем готовый объект клавиатуры
 };
