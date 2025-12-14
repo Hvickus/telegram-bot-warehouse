@@ -7,7 +7,7 @@ const REPORTS_DIR = path.join(__dirname, "../../reports");
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
 /**
- * Генерация Excel отчёта
+ * Генерация Excel отчёта через представление vw_stock_report
  */
 async function generateExcelReport(fromDate, toDate) {
   if (!(fromDate instanceof Date) || !(toDate instanceof Date)) {
@@ -21,7 +21,7 @@ async function generateExcelReport(fromDate, toDate) {
 
   // Заголовки
   const columns = [
-    { header: "ID", key: "id", width: 10 },
+    { header: "ID", key: "product_id", width: 10 },
     { header: "Название", key: "name", width: 30 },
     { header: "Категория", key: "category", width: 20 },
     { header: "Остаток на начало", key: "start_qty", width: 15 },
@@ -48,21 +48,12 @@ async function generateExcelReport(fromDate, toDate) {
     };
   });
 
+  // Получаем данные из представления vw_stock_report
   const res = await pool.query(
-    `
-    SELECT p.id, p.name, c.name AS category,
-           COALESCE(s.quantity,0) + COALESCE(SUM(o.quantity),0) - COALESCE(SUM(i.quantity),0) AS start_qty,
-           COALESCE(SUM(i.quantity),0) AS income,
-           COALESCE(SUM(o.quantity),0) AS outcome,
-           COALESCE(s.quantity,0) AS end_qty
-    FROM products p
-    LEFT JOIN categories c ON p.category_id = c.id
-    LEFT JOIN stock s ON s.product_id = p.id
-    LEFT JOIN income i ON i.product_id = p.id AND i.date >= $1 AND i.date <= $2
-    LEFT JOIN outcome o ON o.product_id = p.id AND o.date >= $1 AND o.date <= $2
-    GROUP BY p.id, p.name, c.name, s.quantity
-    ORDER BY p.id
-  `,
+    `SELECT *
+     FROM vw_stock_report
+     WHERE report_date >= $1 AND report_date <= $2
+     ORDER BY product_id`,
     [fromDate, toDate]
   );
 
