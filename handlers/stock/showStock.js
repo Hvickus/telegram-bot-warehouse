@@ -4,9 +4,8 @@ const pool = require("../../db");
 const PAGE_SIZE = 10;
 
 module.exports = function registerStockPagination(bot) {
-  // Функция отправки страницы остатков
   async function sendStockPage(ctx, offset = 0) {
-    // Получаем общее количество товаров на складе
+    // Получаем общее количество товаров
     const countRes = await pool.query("SELECT COUNT(*) FROM stock");
     const total = parseInt(countRes.rows[0].count, 10);
     const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -23,9 +22,7 @@ module.exports = function registerStockPagination(bot) {
     );
 
     if (!res.rows.length) {
-      const msg = "На складе нет товаров.";
-      if (ctx.updateType === "callback_query") return ctx.editMessageText(msg);
-      return ctx.reply(msg);
+      return ctx.editMessageText("На складе нет товаров.");
     }
 
     // Формируем текст сообщения
@@ -34,23 +31,20 @@ module.exports = function registerStockPagination(bot) {
       text += `${offset + i + 1}. ${r.name} — *${r.quantity}*\n`;
     });
 
-    // Навигационные кнопки
-    const navButtons = [];
-    if (currentPage > 1)
-      navButtons.push(
-        Markup.button.callback("⬅️ Назад", `stock_page_${offset - PAGE_SIZE}`)
-      );
-    if (currentPage < totalPages)
-      navButtons.push(
-        Markup.button.callback("➡️ Вперёд", `stock_page_${offset + PAGE_SIZE}`)
-      );
+    // Формируем кнопки навигации
+    const buttons = [];
+    if (currentPage > 1) {
+      buttons.push(Markup.button.callback("⬅️ Назад", `stock_page_${offset - PAGE_SIZE}`));
+    }
+    if (currentPage < totalPages) {
+      buttons.push(Markup.button.callback("➡️ Вперёд", `stock_page_${offset + PAGE_SIZE}`));
+    }
 
-    // Оборачиваем navButtons в массив массивов для корректного отображения
-    const keyboard = navButtons.length
-      ? Markup.inlineKeyboard([navButtons])
+    const keyboard = buttons.length
+      ? Markup.inlineKeyboard(buttons.map(btn => [btn])) // каждая кнопка в отдельной строке
       : undefined;
 
-    // Отправка или редактирование сообщения
+    // Редактируем сообщение, если это callback_query, иначе отправляем новое
     if (ctx.updateType === "callback_query") {
       await ctx.editMessageText(text, {
         parse_mode: "Markdown",
@@ -67,7 +61,7 @@ module.exports = function registerStockPagination(bot) {
     await sendStockPage(ctx, 0);
   });
 
-  // Обработка навигации между страницами
+  // Навигация по страницам
   bot.action(/stock_page_(\d+)/, async (ctx) => {
     await ctx.answerCbQuery();
     const offset = parseInt(ctx.match[1], 10);
