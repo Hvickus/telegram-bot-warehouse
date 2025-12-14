@@ -3,14 +3,16 @@ const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
 const safeEditMessage = require("../../utils/safeEditMessage");
 const rolesMenu = require("../../menus/rolesMenu");
 
-const MAIN_ADMIN_ID = 1111944400; // ваш Telegram ID
+const MAIN_ADMIN_ID = 1111944400; // <-- здесь твой Telegram ID
 
 module.exports = function (bot) {
   // Главное меню управления ролями
   bot.action("roles_menu", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     const keyboard = await rolesMenu(ctx);
-    await safeEditMessage(ctx, "👥 Управление администраторами:", keyboard);
+    await safeEditMessage(ctx, "👥 Управление администраторами:", {
+      reply_markup: keyboard.reply_markup || keyboard,
+    });
   });
 
   // Добавление администратора
@@ -27,22 +29,23 @@ module.exports = function (bot) {
     if (!s || s.flow !== "add_admin") return next();
 
     const telegramId = Number(ctx.message.text.trim());
-    if (!Number.isInteger(telegramId))
+    if (!Number.isInteger(telegramId)) {
       return ctx.reply("Введите корректный числовой Telegram ID.");
+    }
 
     try {
+      // Назначаем администратора
       await pool.query(
         `UPDATE bot_users SET role = 'admin' WHERE telegram_id = $1`,
         [telegramId]
       );
       delete ctx.session.flow;
 
-      const keyboard = await rolesMenu(ctx); // обновляем список админов
-      await safeEditMessage(
-        ctx,
-        "✅ Пользователь назначен администратором.",
-        keyboard
-      );
+      // Отправляем обновлённый список администраторов
+      const keyboard = await rolesMenu(ctx);
+      await safeEditMessage(ctx, "✅ Пользователь назначен администратором.", {
+        reply_markup: keyboard.reply_markup || keyboard,
+      });
     } catch (err) {
       console.error("Ошибка назначения администратора:", err);
       await ctx.reply("Ошибка при назначении администратора.");
@@ -53,16 +56,22 @@ module.exports = function (bot) {
   bot.action(/del_admin_(.+)/, async (ctx) => {
     await safeAnswerCbQuery(ctx);
     const telegramId = Number(ctx.match[1]);
-    if (telegramId === MAIN_ADMIN_ID)
+
+    if (telegramId === MAIN_ADMIN_ID) {
       return ctx.reply("❌ Главного администратора удалить нельзя.");
+    }
 
     try {
       await pool.query(
         `UPDATE bot_users SET role = 'user' WHERE telegram_id = $1`,
         [telegramId]
       );
+
+      // Отправляем обновлённый список администраторов
       const keyboard = await rolesMenu(ctx);
-      await safeEditMessage(ctx, "✅ Администратор удалён.", keyboard);
+      await safeEditMessage(ctx, "✅ Администратор удалён.", {
+        reply_markup: keyboard.reply_markup || keyboard,
+      });
     } catch (err) {
       console.error("Ошибка удаления администратора:", err);
       await ctx.reply("Ошибка при удалении администратора.");
