@@ -30,11 +30,11 @@ async function generateExcelReport(fromDate, toDate) {
 
   sheet.columns = headers.map((h) => ({
     ...h,
-    width: Math.max(h.header.length + 5, 15),
+    width: h.header.length + 5,
     alignment: { horizontal: "center", vertical: "middle" },
   }));
 
-  // Стиль заголовка только для используемых колонок
+  // Стиль заголовка
   const headerRow = sheet.getRow(1);
   headers.forEach((_, idx) => {
     const cell = headerRow.getCell(idx + 1);
@@ -83,7 +83,7 @@ async function generateExcelReport(fromDate, toDate) {
   res.rows.forEach((r, idx) => {
     const row = sheet.addRow(r);
 
-    // Зебра только для существующих колонок
+    // Зебра
     if (idx % 2 === 1) {
       headers.forEach((_, colIdx) => {
         row.getCell(colIdx + 1).fill = {
@@ -115,7 +115,17 @@ async function generateExcelReport(fromDate, toDate) {
     });
   });
 
-  // Легенда справа от таблицы
+  // Автоширина для всех колонок
+  sheet.columns.forEach((column) => {
+    let maxLength = column.header.length;
+    column.eachCell({ includeEmpty: true }, (cell) => {
+      const len = cell.value ? cell.value.toString().length : 0;
+      if (len > maxLength) maxLength = len;
+    });
+    column.width = maxLength + 5;
+  });
+
+  // Легенда справа
   const legendCol = headers.length + 2;
   const legend = [
     ["Цвет", "Обозначение"],
@@ -124,7 +134,7 @@ async function generateExcelReport(fromDate, toDate) {
     ["Белый", "Остаток >= 50"],
   ];
   legend.forEach((r, i) => {
-    const excelRow = sheet.getRow(i + 2); // начинаем с 2-й строки
+    const excelRow = sheet.getRow(i + 2);
     r.forEach((val, j) => {
       const cell = excelRow.getCell(legendCol + j);
       cell.value = val;
@@ -153,6 +163,16 @@ async function generateExcelReport(fromDate, toDate) {
       };
     });
   });
+
+  // Автоширина для легенды
+  for (let j = legendCol; j <= legendCol + 1; j++) {
+    let maxLength = 0;
+    sheet.getColumn(j).eachCell({ includeEmpty: true }, (cell) => {
+      const len = cell.value ? cell.value.toString().length : 0;
+      if (len > maxLength) maxLength = len;
+    });
+    sheet.getColumn(j).width = maxLength + 5;
+  }
 
   const fileName = `stock_report_${Date.now()}.xlsx`;
   const filePath = path.join(reportsFolder, fileName);
