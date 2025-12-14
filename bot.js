@@ -24,9 +24,6 @@ bot.start(async (ctx) => {
   });
 });
 
-const generateAdvancedStockReport = require("./utils/generateExcelReportAdvanced");
-const safeAnswerCbQuery = require("./utils/safeAnswerCbQuery");
-
 
 
 require("./handlers/reports/excelReport")(bot);
