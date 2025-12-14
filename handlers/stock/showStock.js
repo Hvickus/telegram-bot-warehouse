@@ -3,18 +3,16 @@ const pool = require("../../db");
 
 const PAGE_SIZE = 10;
 
-module.exports = function registerStockPagination(bot) {
-  async function sendStockPage(ctx, page = 1) {
+module.exports = function registerStock(bot) {
+  async function sendPage(ctx, page) {
     const offset = (page - 1) * PAGE_SIZE;
 
-    // Получаем общее количество товаров
     const countRes = await pool.query("SELECT COUNT(*) FROM stock");
-    const total = parseInt(countRes.rows[0].count, 10);
+    const total = Number(countRes.rows[0].count);
     const totalPages = Math.ceil(total / PAGE_SIZE);
 
-    // Получаем товары для текущей страницы
     const res = await pool.query(
-      `SELECT s.product_id, p.name, s.quantity
+      `SELECT p.id, p.name, s.quantity
        FROM stock s
        JOIN products p ON p.id = s.product_id
        ORDER BY p.id
@@ -22,45 +20,36 @@ module.exports = function registerStockPagination(bot) {
       [PAGE_SIZE, offset]
     );
 
-    if (!res.rows.length) {
-      return ctx.reply("На складе нет товаров.");
-    }
-
-    // Формируем текст сообщения
-    let text = `📊 *Текущие остатки на складе* (Страница ${page} из ${totalPages}):\n\n`;
+    let text = `📦 *Остатки на складе* (Страница ${page} из ${totalPages})\n\n`;
     res.rows.forEach((r, i) => {
       text += `${offset + i + 1}. ${r.name} — *${r.quantity}*\n`;
     });
 
-    // Формируем кнопки навигации
     const buttons = [];
-    const navButtons = [];
-    if (page > 1)
-      navButtons.push(Markup.button.callback("⬅️ Назад", `stock_page_${page - 1}`));
-    if (page < totalPages)
-      navButtons.push(Markup.button.callback("➡️ Вперед", `stock_page_${page + 1}`));
 
-    if (navButtons.length > 0) buttons.push(navButtons);
+    if (page > 1) {
+      buttons.push(Markup.button.callback("⬅️ Назад", `stock_${page - 1}`));
+    }
 
-    // Кнопка "Назад в меню"
-    buttons.push([Markup.button.callback("🔙 Главное меню", "back_main")]);
+    if (page < totalPages) {
+      buttons.push(Markup.button.callback("➡️ Вперёд", `stock_${page + 1}`));
+    }
 
-    const keyboard = Markup.inlineKeyboard(buttons);
+    buttons.push(Markup.button.callback("🔙 Главное меню", "back_main"));
 
-    // Всегда отправляем новое сообщение (не редактируем старое)
-    await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
+    await ctx.reply(text, {
+      parse_mode: "Markdown",
+      reply_markup: Markup.inlineKeyboard(buttons, { columns: 2 }),
+    });
   }
 
-  // Кнопка "Показать остатки"
   bot.action("show_stock", async (ctx) => {
     await ctx.answerCbQuery();
-    await sendStockPage(ctx, 1);
+    await sendPage(ctx, 1);
   });
 
-  // Навигация по страницам
-  bot.action(/stock_page_(\d+)/, async (ctx) => {
+  bot.action(/stock_(\d+)/, async (ctx) => {
     await ctx.answerCbQuery();
-    const page = parseInt(ctx.match[1], 10);
-    await sendStockPage(ctx, page);
+    await sendPage(ctx, Number(ctx.match[1]));
   });
 };
