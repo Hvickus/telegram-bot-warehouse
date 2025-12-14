@@ -1,12 +1,17 @@
 const pool = require("../db");
 
-async function logUserAction(telegramId, action, extra = "") {
+/**
+ * Логирование действия пользователя
+ * @param {number} telegramId
+ * @param {string} type - "command", "message", "callback_query"
+ * @param {string} data - текст команды, сообщения или callback_data
+ */
+async function logUserAction(telegramId, type, data) {
   try {
-    const actionText = extra ? `${action}: ${extra}` : action;
-    await pool.query("SELECT log_user_action($1, $2)", [
-      telegramId,
-      actionText,
-    ]);
+    await pool.query(
+      "INSERT INTO user_actions_log (telegram_id, action, created_at) VALUES ($1, $2, now())",
+      [telegramId, `${type}: ${data}`]
+    );
   } catch (err) {
     console.error("Ошибка логирования действия пользователя:", err);
   }

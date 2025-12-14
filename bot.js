@@ -49,6 +49,9 @@ bot.start(async (ctx) => {
   await ctx.reply("Привет! Добро пожаловать.", keyboard);
 });
 
+require("./cron/cleanLogs");
+
+
 registerBotLogger(bot);
 
 // Управление ролями
