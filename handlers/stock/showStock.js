@@ -33,40 +33,37 @@ module.exports = function registerStockPagination(bot) {
 
     // Формируем кнопки навигации
     const buttons = [];
-    if (currentPage > 1) {
+    if (currentPage > 1)
       buttons.push(
         Markup.button.callback("⬅️ Назад", `stock_page_${offset - PAGE_SIZE}`)
       );
-    }
-    if (currentPage < totalPages) {
+    if (currentPage < totalPages)
       buttons.push(
         Markup.button.callback("➡️ Вперёд", `stock_page_${offset + PAGE_SIZE}`)
       );
-    }
 
-    const replyOptions = {};
-    if (buttons.length) {
-      replyOptions.reply_markup = Markup.inlineKeyboard([buttons]);
-    }
+    const keyboard = buttons.length
+      ? Markup.inlineKeyboard([buttons])
+      : undefined;
 
-    // Редактируем существующее сообщение или создаем новое
+    // Редактируем сообщение, если это callback_query, иначе отправляем новое
     if (ctx.updateType === "callback_query") {
       await ctx.editMessageText(text, {
         parse_mode: "Markdown",
-        ...replyOptions,
+        reply_markup: keyboard,
       });
     } else {
-      await ctx.reply(text, { parse_mode: "Markdown", ...replyOptions });
+      await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
     }
   }
 
-  // Обработчик кнопки "Показать остатки"
+  // Кнопка "Показать остатки"
   bot.action("show_stock", async (ctx) => {
     await ctx.answerCbQuery();
     await sendStockPage(ctx, 0);
   });
 
-  // Обработка кнопок навигации
+  // Навигация по страницам
   bot.action(/stock_page_(\d+)/, async (ctx) => {
     await ctx.answerCbQuery();
     const offset = parseInt(ctx.match[1], 10);
