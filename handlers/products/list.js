@@ -1,97 +1,101 @@
 const { Markup } = require("telegraf");
 const pool = require("../../db");
 const replyOrEdit = require("../../utils/replyOrEdit");
+const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
 
-const pageSize = 10; // количество товаров на страницу
+const ITEMS_PER_PAGE = 10;
 
 /**
- * Отправка страницы товаров
+ * Отправка страницы товаров с кнопками
  */
-async function sendProductPage(ctx, page = 0) {
-  const offset = page * pageSize;
+async function sendProductPage(ctx, page = 1) {
+  await safeAnswerCbQuery(ctx);
 
-  // Получаем товары на текущей странице
-  const { rows } = await pool.query(
-    `SELECT p.id, p.name, c.name AS category
-     FROM products p
-     LEFT JOIN categories c ON p.category_id = c.id
-     ORDER BY p.id
-     LIMIT $1 OFFSET $2`,
-    [pageSize, offset]
+  // Получаем общее количество товаров
+  const countRes = await pool.query(`SELECT COUNT(*) AS total FROM products`);
+  const totalItems = parseInt(countRes.rows[0].total, 10);
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+
+  // Проверяем диапазон страниц
+  if (page < 1) page = 1;
+  if (page > totalPages) page = totalPages;
+
+  // Получаем товары для текущей страницы
+  const offset = (page - 1) * ITEMS_PER_PAGE;
+  const res = await pool.query(
+    `SELECT id, name, category_id FROM products ORDER BY id LIMIT $1 OFFSET $2`,
+    [ITEMS_PER_PAGE, offset]
   );
 
-  // Получаем общее количество товаров для расчета навигации
-  const { rows: countRows } = await pool.query(
-    `SELECT COUNT(*) AS total FROM products`
-  );
-  const totalCount = parseInt(countRows[0].total, 10);
-  const totalPages = Math.ceil(totalCount / pageSize);
-
-  if (rows.length === 0) {
-    return ctx.reply("❌ Товары не найдены.");
-  }
-
-  // Кнопки товаров
-  const buttons = rows.map((product) => [
-    Markup.button.callback(product.name, `product_view_${product.id}`),
+  // Формируем кнопки для товаров
+  const buttons = res.rows.map((product) => [
+    Markup.button.callback(product.name, `view_${product.id}`),
   ]);
 
   // Кнопки навигации
   const navButtons = [];
-  if (page > 0)
+  if (page > 1)
     navButtons.push(
       Markup.button.callback("⬅️ Назад", `products_page_${page - 1}`)
     );
-  if (page < totalPages - 1)
+  if (page < totalPages)
     navButtons.push(
       Markup.button.callback("➡️ Вперед", `products_page_${page + 1}`)
     );
   if (navButtons.length > 0) buttons.push(navButtons);
 
-  const text = `📦 *Меню товаров:*\nСтраница ${page + 1} из ${totalPages}`;
+  // Добавляем кнопку "Назад в меню" внизу
+  buttons.push([Markup.button.callback("🔙 Главное меню", "back_main")]);
 
-  await replyOrEdit(ctx, text, {
-    parse_mode: "Markdown",
-    ...Markup.inlineKeyboard(buttons),
-  });
+  // Текст сообщения
+  const text = `📦 Меню товаров:\nСтраница ${page} из ${totalPages}`;
+
+  // Отправляем или редактируем сообщение
+  await replyOrEdit(ctx, text, Markup.inlineKeyboard(buttons));
 }
 
 /**
- * Регистрация обработчиков для пагинации и просмотра товаров
+ * Регистрация хендлеров пагинации и просмотра товаров
  */
 function registerProductPagination(bot) {
-  // Начало просмотра списка
-  bot.action("products_list", async (ctx) => {
-    await sendProductPage(ctx, 0);
-  });
+  // Стартовое отображение списка товаров
+  bot.action("products_list", (ctx) => sendProductPage(ctx, 1));
 
-  // Пагинация
-  bot.action(/products_page_(\d+)/, async (ctx) => {
+  // Пагинация по страницам
+  bot.action(/products_page_(\d+)/, (ctx) => {
     const page = parseInt(ctx.match[1], 10);
-    await sendProductPage(ctx, page);
+    return sendProductPage(ctx, page);
   });
 
   // Просмотр конкретного товара
-  bot.action(/product_view_(\d+)/, async (ctx) => {
-    const productId = parseInt(ctx.match[1], 10);
-    const { rows } = await pool.query(
+  bot.action(/view_(\d+)/, async (ctx) => {
+    await safeAnswerCbQuery(ctx);
+    const id = parseInt(ctx.match[1], 10);
+    const res = await pool.query(
       `SELECT p.id, p.name, c.name AS category
        FROM products p
        LEFT JOIN categories c ON p.category_id = c.id
        WHERE p.id = $1`,
-      [productId]
+      [id]
     );
 
-    if (rows.length === 0) {
-      return ctx.answerCbQuery("❌ Товар не найден", { show_alert: true });
+    if (res.rowCount === 0) {
+      return ctx.reply("❗ Товар не найден.");
     }
 
-    const product = rows[0];
-    const text = `*ID:* ${product.id}\n*Название:* ${
-      product.name
-    }\n*Категория:* ${product.category || "-"}`;
+    const product = res.rows[0];
+    const text = `📝 Информация о товаре:
+ID: ${product.id}
+Название: ${product.name}
+Категория: ${product.category || "-"}`;
 
-    await ctx.editMessageText(text, { parse_mode: "Markdown" });
+    await replyOrEdit(
+      ctx,
+      text,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🔙 Назад к списку", "products_list")],
+      ])
+    );
   });
 }
 
