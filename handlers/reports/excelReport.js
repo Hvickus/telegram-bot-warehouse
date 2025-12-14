@@ -1,4 +1,3 @@
-const { Markup } = require("telegraf");
 const ExcelJS = require("exceljs");
 const path = require("path");
 const fs = require("fs");
@@ -9,258 +8,184 @@ if (!fs.existsSync(reportsFolder)) {
   fs.mkdirSync(reportsFolder, { recursive: true });
 }
 
-module.exports = function (bot) {
-  bot.action("excel_report", async (ctx) => {
-    await ctx.answerCbQuery();
-    await ctx.editMessageText("Выберите период для Excel отчёта:", {
-      reply_markup: Markup.inlineKeyboard([
-        [Markup.button.callback("📅 Сегодня", "excel_today")],
-        [Markup.button.callback("📆 Этот месяц", "excel_month")],
-        [Markup.button.callback("🗓 Выбрать период", "excel_custom")],
-        [Markup.button.callback("🔙 Назад", "back_main")],
-      ]),
-    });
+async function generateExcelReport(fromDate, toDate) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Склад");
+
+  /*
+   * ====== ШАПКА ОТЧЁТА ======
+   */
+  sheet.mergeCells("A1:F1");
+  sheet.getCell("A1").value = "Отчёт по складу";
+  sheet.getCell("A1").font = { size: 16, bold: true };
+  sheet.getCell("A1").alignment = { horizontal: "center" };
+
+  sheet.mergeCells("A2:F2");
+  sheet.getCell(
+    "A2"
+  ).value = `Период: ${fromDate.toLocaleDateString()} — ${toDate.toLocaleDateString()}`;
+  sheet.getCell("A2").alignment = { horizontal: "center" };
+
+  sheet.addRow([]);
+
+  /*
+   * ====== ЗАГОЛОВКИ ТАБЛИЦЫ ======
+   */
+  const headerRow = sheet.addRow([
+    "ID",
+    "Товар",
+    "Категория",
+    "Остаток на начало",
+    "Приход",
+    "Списание",
+    "Остаток на конец",
+  ]);
+
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4472C4" },
+    };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = {
+      top: { style: "thin" },
+      bottom: { style: "thin" },
+      left: { style: "thin" },
+      right: { style: "thin" },
+    };
   });
 
-  async function generateExcelReport(fromDate, toDate) {
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("Отчёт по складу");
+  /*
+   * ====== ДАННЫЕ ======
+   */
+  const res = await pool.query(
+    `
+    SELECT
+      p.id,
+      p.name,
+      c.name AS category,
 
-    sheet.columns = [
-      { header: "ID", key: "id", width: 10 },
-      { header: "Название", key: "name", width: 30 },
-      { header: "Категория", key: "category", width: 20 },
-      { header: "Начальный остаток", key: "start_qty", width: 15 },
-      { header: "Приход", key: "income", width: 10 },
-      { header: "Списание", key: "outcome", width: 10 },
-      { header: "Конечный остаток", key: "end_qty", width: 15 },
-    ];
+      COALESCE((
+        SELECT SUM(i.quantity) - SUM(o.quantity)
+        FROM income i
+        FULL JOIN outcome o ON o.product_id = i.product_id
+        WHERE i.product_id = p.id
+          AND COALESCE(i.date, o.date) < $1
+      ), 0) AS start_qty,
 
-    // Стиль заголовков
-    sheet.getRow(1).eachCell((cell) => {
-      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-      cell.fill = {
+      COALESCE(SUM(i2.quantity), 0) AS income,
+      COALESCE(SUM(o2.quantity), 0) AS outcome,
+
+      COALESCE((
+        SELECT SUM(i.quantity) - SUM(o.quantity)
+        FROM income i
+        FULL JOIN outcome o ON o.product_id = i.product_id
+        WHERE i.product_id = p.id
+          AND COALESCE(i.date, o.date) <= $2
+      ), 0) AS end_qty
+
+    FROM products p
+    LEFT JOIN categories c ON c.id = p.category_id
+    LEFT JOIN income i2 ON i2.product_id = p.id AND i2.date BETWEEN $1 AND $2
+    LEFT JOIN outcome o2 ON o2.product_id = p.id AND o2.date BETWEEN $1 AND $2
+    GROUP BY p.id, p.name, c.name
+    ORDER BY p.name
+    `,
+    [fromDate, toDate]
+  );
+
+  res.rows.forEach((r) => {
+    const row = sheet.addRow([
+      r.id,
+      r.name,
+      r.category || "-",
+      r.start_qty,
+      r.income,
+      r.outcome,
+      r.end_qty,
+    ]);
+
+    row.eachCell((cell, col) => {
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: col === 2 ? "left" : "center",
+      };
+      cell.border = {
+        top: { style: "thin" },
+        bottom: { style: "thin" },
+        left: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+
+    const endQtyCell = row.getCell(7);
+
+    if (r.end_qty === 0) {
+      endQtyCell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: "FF4472C4" },
+        fgColor: { argb: "FFFFC7CE" },
       };
-      cell.alignment = { vertical: "middle", horizontal: "center" };
+    } else if (r.end_qty < 5) {
+      endQtyCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFFFEB9C" },
+      };
+    } else {
+      endQtyCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFC6EFCE" },
+      };
+    }
+  });
+
+  /*
+   * ====== АВТОШИРИНА ======
+   */
+  sheet.columns.forEach((column) => {
+    let max = 12;
+    column.eachCell({ includeEmpty: true }, (cell) => {
+      const len = cell.value ? cell.value.toString().length : 0;
+      max = Math.max(max, len);
     });
-
-    const query = `
-      SELECT 
-        p.id,
-        p.name,
-        c.name AS category,
-        COALESCE(s.quantity,0)
-          - COALESCE(SUM(i.quantity) FILTER (WHERE i.date < $1),0)
-          + COALESCE(SUM(o.quantity) FILTER (WHERE o.date < $1),0) AS start_qty,
-        COALESCE(SUM(i.quantity) FILTER (WHERE i.date >= $1 AND i.date <= $2),0) AS income,
-        COALESCE(SUM(o.quantity) FILTER (WHERE o.date >= $1 AND o.date <= $2),0) AS outcome,
-        (
-          COALESCE(s.quantity,0)
-          - COALESCE(SUM(i.quantity) FILTER (WHERE i.date < $1),0)
-          + COALESCE(SUM(o.quantity) FILTER (WHERE o.date < $1),0)
-          + COALESCE(SUM(i.quantity) FILTER (WHERE i.date >= $1 AND i.date <= $2),0)
-          - COALESCE(SUM(o.quantity) FILTER (WHERE o.date >= $1 AND o.date <= $2),0)
-        ) AS end_qty
-      FROM products p
-      LEFT JOIN categories c ON p.category_id = c.id
-      LEFT JOIN stock s ON s.product_id = p.id
-      LEFT JOIN income i ON i.product_id = p.id
-      LEFT JOIN outcome o ON o.product_id = p.id
-      GROUP BY p.id, p.name, c.name, s.quantity
-      ORDER BY p.id
-    `;
-
-    const res = await pool.query(query, [fromDate, toDate]);
-
-    res.rows.forEach((r) => {
-      const row = sheet.addRow(r);
-
-      // Конечный остаток
-      const endCell = row.getCell("end_qty");
-      if (r.end_qty === 0) {
-        endCell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FFFF0000" },
-        };
-        endCell.font = { color: { argb: "FFFFFFFF" }, bold: true };
-      } else if (r.end_qty < 5) {
-        endCell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FFFFC000" },
-        };
-        endCell.font = { bold: true };
-      } else {
-        endCell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FF92D050" },
-        };
-      }
-
-      // Условное форматирование прихода
-      const incomeCell = row.getCell("income");
-      if (r.income > 50) {
-        incomeCell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FF00B050" },
-        };
-        incomeCell.font = { color: { argb: "FFFFFFFF" }, bold: true };
-      }
-
-      // Условное форматирование списания
-      const outcomeCell = row.getCell("outcome");
-      if (r.outcome > 50) {
-        outcomeCell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FFFF0000" },
-        };
-        outcomeCell.font = { color: { argb: "FFFFFFFF" }, bold: true };
-      }
-    });
-
-    // Зебра-стиль
-    sheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return; // заголовок
-      row.eachCell((cell) => {
-        if (!cell.fill) {
-          // если нет пользовательского фона
-          if (rowNumber % 2 === 0) {
-            cell.fill = {
-              type: "pattern",
-              pattern: "solid",
-              fgColor: { argb: "FFEAF1FB" },
-            };
-          }
-        }
-      });
-    });
-
-    // Легенда цветов
-    const legendRow = sheet.rowCount + 2;
-    sheet.getCell(`A${legendRow}`).value = "Легенда:";
-    sheet.getCell(`A${legendRow}`).font = { bold: true };
-
-    sheet.getCell(`B${legendRow}`).value =
-      "Конечный остаток = 0 (нет на складе)";
-    sheet.getCell(`B${legendRow}`).fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFFF0000" },
-    };
-    sheet.getCell(`B${legendRow}`).font = {
-      color: { argb: "FFFFFFFF" },
-      bold: true,
-    };
-
-    sheet.getCell(`B${legendRow + 1}`).value =
-      "Конечный остаток < 5 (мало на складе)";
-    sheet.getCell(`B${legendRow + 1}`).fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFFFC000" },
-    };
-
-    sheet.getCell(`B${legendRow + 2}`).value = "Конечный остаток ≥ 5 (в норме)";
-    sheet.getCell(`B${legendRow + 2}`).fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FF92D050" },
-    };
-
-    sheet.getCell(`B${legendRow + 3}`).value = "Приход > 50 (большой приход)";
-    sheet.getCell(`B${legendRow + 3}`).fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FF00B050" },
-    };
-    sheet.getCell(`B${legendRow + 3}`).font = {
-      color: { argb: "FFFFFFFF" },
-      bold: true,
-    };
-
-    sheet.getCell(`B${legendRow + 4}`).value =
-      "Списание > 50 (большое списание)";
-    sheet.getCell(`B${legendRow + 4}`).fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFFF0000" },
-    };
-    sheet.getCell(`B${legendRow + 4}`).font = {
-      color: { argb: "FFFFFFFF" },
-      bold: true,
-    };
-
-    const filePath = path.join(
-      reportsFolder,
-      `stock_report_${Date.now()}.xlsx`
-    );
-    await workbook.xlsx.writeFile(filePath);
-    return filePath;
-  }
-
-  bot.action("excel_today", async (ctx) => {
-    await ctx.answerCbQuery();
-    const today = new Date();
-    const from = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate()
-    );
-    const to = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-      23,
-      59,
-      59
-    );
-
-    await ctx.reply("Генерация отчёта за сегодня...");
-    const filePath = await generateExcelReport(from, to);
-    await ctx.replyWithDocument({ source: filePath });
+    column.width = max + 2;
   });
 
-  bot.action("excel_month", async (ctx) => {
-    await ctx.answerCbQuery();
-    const now = new Date();
-    const from = new Date(now.getFullYear(), now.getMonth(), 1);
-    const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  /*
+   * ====== ЛЕГЕНДА ======
+   */
+  sheet.getCell("I5").value = "Легенда:";
+  sheet.getCell("I5").font = { bold: true };
 
-    await ctx.reply("Генерация отчёта за текущий месяц...");
-    const filePath = await generateExcelReport(from, to);
-    await ctx.replyWithDocument({ source: filePath });
-  });
+  sheet.getCell("I6").value = "0 — нет товара";
+  sheet.getCell("I6").fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFFFC7CE" },
+  };
 
-  bot.action("excel_custom", async (ctx) => {
-    await ctx.answerCbQuery();
-    ctx.session = ctx.session || {};
-    ctx.session.flow = "excel_custom_start";
-    await ctx.reply("Введите период в формате: YYYY-MM-DD - YYYY-MM-DD");
-  });
+  sheet.getCell("I7").value = "< 5 — низкий остаток";
+  sheet.getCell("I7").fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFFFEB9C" },
+  };
 
-  bot.on("text", async (ctx, next) => {
-    const s = ctx.session;
-    if (!s || s.flow !== "excel_custom_start") return next();
+  sheet.getCell("I8").value = "≥ 5 — норма";
+  sheet.getCell("I8").fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFC6EFCE" },
+  };
 
-    const text = ctx.message.text.trim();
-    const match = text.match(/^(\d{4}-\d{2}-\d{2})\s*-\s*(\d{4}-\d{2}-\d{2})$/);
-    if (!match)
-      return ctx.reply("Неверный формат. Используйте: YYYY-MM-DD - YYYY-MM-DD");
+  const filePath = path.join(reportsFolder, `stock_report_${Date.now()}.xlsx`);
 
-    const from = new Date(match[1]);
-    const to = new Date(match[2]);
-    to.setHours(23, 59, 59);
+  await workbook.xlsx.writeFile(filePath);
+  return filePath;
+}
 
-    delete ctx.session.flow;
-    await ctx.reply("Генерация отчёта за выбранный период...");
-    const filePath = await generateExcelReport(from, to);
-    await ctx.replyWithDocument({ source: filePath });
-  });
-};
+module.exports = { generateExcelReport };
