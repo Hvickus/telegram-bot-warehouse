@@ -58,7 +58,6 @@ async function generateExcelReport(fromDate, toDate) {
   // Добавляем строки и применяем цветовое оформление
   res.rows.forEach((r, index) => {
     const row = sheet.addRow(r);
-
     row.alignment = { vertical: "middle", horizontal: "center" };
 
     ["start_qty", "end_qty"].forEach((key) => {
@@ -146,54 +145,13 @@ async function generateExcelReport(fromDate, toDate) {
   const filePath = path.join(REPORTS_DIR, fileName);
 
   await workbook.xlsx.writeFile(filePath);
-  return filePath;
+
+  // Возвращаем объект с данными файла
+  return {
+    path: filePath,
+    filename: fileName,
+    periodStr,
+  };
 }
 
-/**
- * Регистрация обработчика бота
- */
-function registerExcelReport(bot) {
-  bot.action("excel_report", async (ctx) => {
-    ctx.session = ctx.session || {};
-    ctx.session.flow = "excel_report";
-
-    await ctx.editMessageText(
-      "Введите период отчёта в формате: YYYY-MM-DD - YYYY-MM-DD"
-    );
-  });
-
-  bot.on("text", async (ctx, next) => {
-    const s = ctx.session;
-    if (!s || s.flow !== "excel_report") return next();
-
-    const match = ctx.message.text
-      .trim()
-      .match(/^(\d{4}-\d{2}-\d{2})\s*-\s*(\d{4}-\d{2}-\d{2})$/);
-    if (!match)
-      return ctx.reply("Неверный формат. Используйте: YYYY-MM-DD - YYYY-MM-DD");
-
-    const fromDate = new Date(match[1]);
-    const toDate = new Date(match[2]);
-
-    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
-      return ctx.reply("Некорректные даты.");
-    }
-
-    await ctx.editMessageText("Генерируем Excel отчёт, подождите...");
-
-    try {
-      const filePath = await generateExcelReport(fromDate, toDate);
-      delete ctx.session.flow;
-
-      await ctx.replyWithDocument({
-        source: filePath,
-        filename: path.basename(filePath),
-      });
-    } catch (err) {
-      console.error("Ошибка генерации Excel отчёта:", err);
-      await ctx.reply("Ошибка при генерации отчёта.");
-    }
-  });
-}
-
-module.exports = { generateExcelReport, registerExcelReport };
+module.exports = { generateExcelReport };

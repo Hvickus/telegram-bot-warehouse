@@ -4,9 +4,7 @@ const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
 const { generateExcelReport } = require("./excelReport");
 
 module.exports = function (bot) {
-  /**
-   * Меню выбора периода Excel-отчёта
-   */
+  // Главное меню Excel-отчёта
   bot.action("excel_report", async (ctx) => {
     await safeAnswerCbQuery(ctx);
 
@@ -21,9 +19,7 @@ module.exports = function (bot) {
     });
   });
 
-  /**
-   * Отчёт за сегодня
-   */
+  // Отчёт за сегодня
   bot.action("excel_today", async (ctx) => {
     await safeAnswerCbQuery(ctx);
 
@@ -44,13 +40,18 @@ module.exports = function (bot) {
 
     await replyOrEdit(ctx, "⏳ Формирование отчёта за сегодня...");
 
-    const filePath = await generateExcelReport(from, to);
-    await ctx.replyWithDocument({ source: filePath });
+    const report = await generateExcelReport(from, to);
+
+    await ctx.replyWithDocument(
+      { source: report.path, filename: report.filename },
+      Markup.inlineKeyboard([
+        [Markup.button.callback("📈 Сформировать ещё отчёт", "excel_report")],
+        [Markup.button.callback("🔙 Главное меню", "back_main")],
+      ])
+    );
   });
 
-  /**
-   * Отчёт за текущий месяц
-   */
+  // Отчёт за текущий месяц
   bot.action("excel_month", async (ctx) => {
     await safeAnswerCbQuery(ctx);
 
@@ -60,13 +61,18 @@ module.exports = function (bot) {
 
     await replyOrEdit(ctx, "⏳ Формирование отчёта за текущий месяц...");
 
-    const filePath = await generateExcelReport(from, to);
-    await ctx.replyWithDocument({ source: filePath });
+    const report = await generateExcelReport(from, to);
+
+    await ctx.replyWithDocument(
+      { source: report.path, filename: report.filename },
+      Markup.inlineKeyboard([
+        [Markup.button.callback("📈 Сформировать ещё отчёт", "excel_report")],
+        [Markup.button.callback("🔙 Главное меню", "back_main")],
+      ])
+    );
   });
 
-  /**
-   * Произвольный период
-   */
+  // Произвольный период
   bot.action("excel_custom", async (ctx) => {
     await safeAnswerCbQuery(ctx);
 
@@ -80,9 +86,7 @@ module.exports = function (bot) {
     );
   });
 
-  /**
-   * Обработка ввода периода
-   */
+  // Обработка ввода периода
   bot.on("text", async (ctx, next) => {
     const s = ctx.session;
     if (!s || s.flow !== "excel_custom_period") return next();
@@ -105,7 +109,15 @@ module.exports = function (bot) {
     delete s.flow;
 
     await replyOrEdit(ctx, "⏳ Формирование отчёта за выбранный период...");
-    const filePath = await generateExcelReport(from, to);
-    await ctx.replyWithDocument({ source: filePath });
+
+    const report = await generateExcelReport(from, to);
+
+    await ctx.replyWithDocument(
+      { source: report.path, filename: report.filename },
+      Markup.inlineKeyboard([
+        [Markup.button.callback("📈 Сформировать ещё отчёт", "excel_report")],
+        [Markup.button.callback("🔙 Главное меню", "back_main")],
+      ])
+    );
   });
 };
