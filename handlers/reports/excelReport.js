@@ -49,13 +49,10 @@ async function generateExcelReport(fromDate, toDate) {
   });
 
   // Получаем данные из представления vw_stock_report
-  const res = await pool.query(
-    `SELECT *
-     FROM vw_stock_report
-     WHERE report_date >= $1 AND report_date <= $2
-     ORDER BY product_id`,
-    [fromDate, toDate]
-  );
+  const res = await pool.query("SELECT * FROM fn_stock_report($1, $2)", [
+    fromDate,
+    toDate,
+  ]);
 
   // Добавляем строки и применяем цветовое оформление
   res.rows.forEach((r, index) => {
