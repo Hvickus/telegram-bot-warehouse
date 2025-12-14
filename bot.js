@@ -24,24 +24,7 @@ bot.start(async (ctx) => {
   });
 });
 
-const generateAdvancedStockReport = require("./utils/generateExcelReportAdvanced");
-const safeAnswerCbQuery = require("./utils/safeAnswerCbQuery");
-
-bot.action("generate_excel_report", async (ctx) => {
-  await safeAnswerCbQuery(ctx);
-
-  try {
-    const filePath = await generateAdvancedStockReport();
-    await ctx.replyWithDocument({
-      source: filePath,
-      filename: "advanced_stock_report.xlsx",
-    });
-  } catch (err) {
-    console.error("Ошибка генерации Excel отчёта:", err);
-    await ctx.reply("Ошибка при формировании Excel отчёта.");
-  }
-});
-
+require("./handlers/reports/excelReport")(bot);
 require("./handlers/navigation")(bot);
 require("./handlers/products/list")(bot);
 require("./handlers/products/view")(bot);
