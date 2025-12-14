@@ -47,18 +47,18 @@ async function generateExcelReport(fromDate, toDate) {
   const res = await pool.query(
     `
     SELECT p.id, p.name, c.name AS category,
-      COALESCE(s_start.quantity,0) AS start_qty,
-      COALESCE(SUM(i.quantity),0) AS income,
-      COALESCE(SUM(o.quantity),0) AS outcome,
-      COALESCE(s_start.quantity,0) + COALESCE(SUM(i.quantity),0) - COALESCE(SUM(o.quantity),0) AS end_qty
+           COALESCE(s.quantity,0) AS start_qty,
+           COALESCE(SUM(i.quantity),0) AS income,
+           COALESCE(SUM(o.quantity),0) AS outcome,
+           COALESCE(s.quantity,0) + COALESCE(SUM(i.quantity),0) - COALESCE(SUM(o.quantity),0) AS end_qty
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
-    LEFT JOIN stock s_start ON s_start.product_id = p.id AND s_start.date <= $1
+    LEFT JOIN stock s ON s.product_id = p.id
     LEFT JOIN income i ON i.product_id = p.id AND i.date >= $1 AND i.date <= $2
     LEFT JOIN outcome o ON o.product_id = p.id AND o.date >= $1 AND o.date <= $2
-    GROUP BY p.id, p.name, c.name, s_start.quantity
+    GROUP BY p.id, p.name, c.name, s.quantity
     ORDER BY p.id
-    `,
+  `,
     [fromStr, toStr]
   );
 
