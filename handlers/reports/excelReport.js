@@ -1,191 +1,181 @@
 const ExcelJS = require("exceljs");
-const path = require("path");
-const fs = require("fs");
 const pool = require("../../db");
+const fs = require("fs");
+const path = require("path");
 
-const reportsFolder = path.join(__dirname, "../../reports");
-if (!fs.existsSync(reportsFolder)) {
-  fs.mkdirSync(reportsFolder, { recursive: true });
+const REPORTS_DIR = path.join(__dirname, "../../reports");
+if (!fs.existsSync(REPORTS_DIR)) {
+  fs.mkdirSync(REPORTS_DIR, { recursive: true });
 }
 
-async function generateExcelReport(fromDate, toDate) {
+async function generateExcelReport(ctx, fromDate, toDate) {
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet("Склад");
+  const sheet = workbook.addWorksheet("Отчёт по складу");
 
-  /*
-   * ====== ШАПКА ОТЧЁТА ======
-   */
-  sheet.mergeCells("A1:F1");
-  sheet.getCell("A1").value = "Отчёт по складу";
-  sheet.getCell("A1").font = { size: 16, bold: true };
-  sheet.getCell("A1").alignment = { horizontal: "center" };
+  /* ===== Заголовок ===== */
+  const fromStr = fromDate.toISOString().slice(0, 10);
+  const toStr = toDate.toISOString().slice(0, 10);
 
-  sheet.mergeCells("A2:F2");
+  sheet.mergeCells("A1:H1");
   sheet.getCell(
-    "A2"
-  ).value = `Период: ${fromDate.toLocaleDateString()} — ${toDate.toLocaleDateString()}`;
-  sheet.getCell("A2").alignment = { horizontal: "center" };
+    "A1"
+  ).value = `Отчёт по складу за период: ${fromStr} — ${toStr}`;
+  sheet.getCell("A1").font = { bold: true, size: 14 };
+  sheet.getCell("A1").alignment = { horizontal: "center" };
 
   sheet.addRow([]);
 
-  /*
-   * ====== ЗАГОЛОВКИ ТАБЛИЦЫ ======
-   */
-  const headerRow = sheet.addRow([
-    "ID",
-    "Товар",
-    "Категория",
-    "Остаток на начало",
-    "Приход",
-    "Списание",
-    "Остаток на конец",
-  ]);
+  /* ===== Колонки ===== */
+  sheet.columns = [
+    { header: "ID", key: "id" },
+    { header: "Название", key: "name" },
+    { header: "Категория", key: "category" },
+    { header: "Начальный остаток", key: "begin_qty" },
+    { header: "Приход", key: "income" },
+    { header: "Списание", key: "outcome" },
+    { header: "Конечный остаток", key: "end_qty" },
+  ];
 
+  const headerRow = sheet.getRow(3);
   headerRow.eachCell((cell) => {
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.font = { bold: true };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
     cell.fill = {
       type: "pattern",
       pattern: "solid",
-      fgColor: { argb: "FF4472C4" },
-    };
-    cell.alignment = { horizontal: "center", vertical: "middle" };
-    cell.border = {
-      top: { style: "thin" },
-      bottom: { style: "thin" },
-      left: { style: "thin" },
-      right: { style: "thin" },
+      fgColor: { argb: "FFD9E1F2" },
     };
   });
 
-  /*
-   * ====== ДАННЫЕ ======
-   */
-  const res = await pool.query(
-    `
+  /* ===== SQL ===== */
+  const sql = `
+    WITH movements_after AS (
+      SELECT
+        p.id,
+        COALESCE(SUM(i.quantity), 0) AS income_after,
+        COALESCE(SUM(o.quantity), 0) AS outcome_after
+      FROM products p
+      LEFT JOIN income i
+        ON i.product_id = p.id
+       AND i.date > $2
+      LEFT JOIN outcome o
+        ON o.product_id = p.id
+       AND o.date > $2
+      GROUP BY p.id
+    ),
+    movements_period AS (
+      SELECT
+        p.id,
+        COALESCE(SUM(i.quantity), 0) AS income_period,
+        COALESCE(SUM(o.quantity), 0) AS outcome_period
+      FROM products p
+      LEFT JOIN income i
+        ON i.product_id = p.id
+       AND i.date >= $1
+       AND i.date <= $2
+      LEFT JOIN outcome o
+        ON o.product_id = p.id
+       AND o.date >= $1
+       AND o.date <= $2
+      GROUP BY p.id
+    )
     SELECT
       p.id,
       p.name,
       c.name AS category,
 
-      COALESCE((
-        SELECT SUM(i.quantity) - SUM(o.quantity)
-        FROM income i
-        FULL JOIN outcome o ON o.product_id = i.product_id
-        WHERE i.product_id = p.id
-          AND COALESCE(i.date, o.date) < $1
-      ), 0) AS start_qty,
+      (
+        COALESCE(s.quantity, 0)
+          - ma.income_after
+          + ma.outcome_after
+          - mp.income_period
+          + mp.outcome_period
+      ) AS begin_qty,
 
-      COALESCE(SUM(i2.quantity), 0) AS income,
-      COALESCE(SUM(o2.quantity), 0) AS outcome,
+      mp.income_period AS income,
+      mp.outcome_period AS outcome,
 
-      COALESCE((
-        SELECT SUM(i.quantity) - SUM(o.quantity)
-        FROM income i
-        FULL JOIN outcome o ON o.product_id = i.product_id
-        WHERE i.product_id = p.id
-          AND COALESCE(i.date, o.date) <= $2
-      ), 0) AS end_qty
+      (
+        COALESCE(s.quantity, 0)
+          - ma.income_after
+          + ma.outcome_after
+      ) AS end_qty
 
     FROM products p
     LEFT JOIN categories c ON c.id = p.category_id
-    LEFT JOIN income i2 ON i2.product_id = p.id AND i2.date BETWEEN $1 AND $2
-    LEFT JOIN outcome o2 ON o2.product_id = p.id AND o2.date BETWEEN $1 AND $2
-    GROUP BY p.id, p.name, c.name
-    ORDER BY p.name
-    `,
-    [fromDate, toDate]
-  );
+    LEFT JOIN stock s ON s.product_id = p.id
+    LEFT JOIN movements_after ma ON ma.id = p.id
+    LEFT JOIN movements_period mp ON mp.id = p.id
 
+    ORDER BY p.id;
+  `;
+
+  const res = await pool.query(sql, [fromDate, toDate]);
+
+  /* ===== Данные ===== */
   res.rows.forEach((r) => {
-    const row = sheet.addRow([
-      r.id,
-      r.name,
-      r.category || "-",
-      r.start_qty,
-      r.income,
-      r.outcome,
-      r.end_qty,
-    ]);
-
-    row.eachCell((cell, col) => {
-      cell.alignment = {
-        vertical: "middle",
-        horizontal: col === 2 ? "left" : "center",
-      };
-      cell.border = {
-        top: { style: "thin" },
-        bottom: { style: "thin" },
-        left: { style: "thin" },
-        right: { style: "thin" },
-      };
+    const row = sheet.addRow({
+      id: r.id,
+      name: r.name,
+      category: r.category || "-",
+      begin_qty: r.begin_qty,
+      income: r.income,
+      outcome: r.outcome,
+      end_qty: r.end_qty,
     });
 
-    const endQtyCell = row.getCell(7);
+    row.eachCell((cell) => {
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+
+    /* Раскраска конечного остатка */
+    const endCell = row.getCell("end_qty");
 
     if (r.end_qty === 0) {
-      endQtyCell.fill = {
+      endCell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: "FFFFC7CE" },
+        fgColor: { argb: "FFFFC7CE" }, // красный
       };
-    } else if (r.end_qty < 5) {
-      endQtyCell.fill = {
+    } else if (r.end_qty <= 50) {
+      endCell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: "FFFFEB9C" },
+        fgColor: { argb: "FFFFEB9C" }, // жёлтый
       };
     } else {
-      endQtyCell.fill = {
+      endCell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: "FFC6EFCE" },
+        fgColor: { argb: "FFC6EFCE" }, // зелёный
       };
     }
   });
 
-  /*
-   * ====== АВТОШИРИНА ======
-   */
-  sheet.columns.forEach((column) => {
-    let max = 12;
-    column.eachCell({ includeEmpty: true }, (cell) => {
-      const len = cell.value ? cell.value.toString().length : 0;
-      max = Math.max(max, len);
+  /* ===== Автоширина ===== */
+  sheet.columns.forEach((col) => {
+    let max = col.header.length;
+    col.eachCell({ includeEmpty: true }, (cell) => {
+      max = Math.max(max, String(cell.value || "").length);
     });
-    column.width = max + 2;
+    col.width = max + 2;
   });
 
-  /*
-   * ====== ЛЕГЕНДА ======
-   */
-  sheet.getCell("I5").value = "Легенда:";
-  sheet.getCell("I5").font = { bold: true };
+  /* ===== Легенда ===== */
+  sheet.addRow([]);
+  sheet.addRow(["Легенда:"]);
+  sheet.addRow(["Зелёный", "Остаток > 50"]);
+  sheet.addRow(["Жёлтый", "Остаток от 1 до 50"]);
+  sheet.addRow(["Красный", "Остаток = 0"]);
 
-  sheet.getCell("I6").value = "0 — нет товара";
-  sheet.getCell("I6").fill = {
-    type: "pattern",
-    pattern: "solid",
-    fgColor: { argb: "FFFFC7CE" },
-  };
-
-  sheet.getCell("I7").value = "< 5 — низкий остаток";
-  sheet.getCell("I7").fill = {
-    type: "pattern",
-    pattern: "solid",
-    fgColor: { argb: "FFFFEB9C" },
-  };
-
-  sheet.getCell("I8").value = "≥ 5 — норма";
-  sheet.getCell("I8").fill = {
-    type: "pattern",
-    pattern: "solid",
-    fgColor: { argb: "FFC6EFCE" },
-  };
-
-  const filePath = path.join(reportsFolder, `stock_report_${Date.now()}.xlsx`);
+  /* ===== Файл ===== */
+  const filePath = path.join(REPORTS_DIR, `stock_report_${Date.now()}.xlsx`);
 
   await workbook.xlsx.writeFile(filePath);
-  return filePath;
+  await ctx.replyWithDocument({ source: filePath });
+  fs.unlinkSync(filePath);
 }
 
-module.exports = { generateExcelReport };
+module.exports = {
+  generateExcelReport,
+};
