@@ -27,8 +27,48 @@ async function generateExcelReport(fromDate, toDate) {
     { header: "Конец", key: "end_qty", width: 12 },
   ];
 
-  // Стиль заголовка
-  sheet.getRow(1).eachCell((cell) => {
+  const fromStr = fromDate.toISOString().slice(0, 10);
+  const toStr = toDate.toISOString().slice(0, 10);
+
+  const res = await pool.query(
+    `
+    SELECT p.id, p.name, c.name AS category,
+           COALESCE(s_start.quantity,0) AS start_qty,
+           COALESCE(SUM(i.quantity),0) AS income,
+           COALESCE(SUM(o.quantity),0) AS outcome,
+           COALESCE(s_start.quantity,0) + COALESCE(SUM(i.quantity),0) - COALESCE(SUM(o.quantity),0) AS end_qty
+    FROM products p
+    LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN stock s_start ON s_start.product_id = p.id AND s_start.date <= $1
+    LEFT JOIN income i ON i.product_id = p.id AND i.date >= $1 AND i.date <= $2
+    LEFT JOIN outcome o ON o.product_id = p.id AND o.date >= $1 AND o.date <= $2
+    GROUP BY p.id, p.name, c.name, s_start.quantity
+    ORDER BY p.id
+    `,
+    [fromStr, toStr]
+  );
+
+  // Функция для установки границ
+  function setBorders(cell) {
+    cell.border = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
+  }
+
+  // Заголовок с датами отчета
+  sheet.insertRow(1, [`Отчет с ${fromStr} по ${toStr}`]);
+  sheet.mergeCells(1, 1, 1, sheet.columns.length);
+  const headerRow = sheet.getRow(1);
+  headerRow.font = { bold: true, size: 14 };
+  headerRow.alignment = { vertical: "middle", horizontal: "center" };
+  headerRow.eachCell(setBorders);
+
+  // Заголовки столбцов
+  const colHeaderRow = sheet.getRow(2);
+  colHeaderRow.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
     cell.fill = {
       type: "pattern",
@@ -36,32 +76,15 @@ async function generateExcelReport(fromDate, toDate) {
       fgColor: { argb: "FF4472C4" },
     };
     cell.alignment = { vertical: "middle", horizontal: "center" };
+    setBorders(cell);
   });
 
-  const fromStr = fromDate.toISOString().slice(0, 10);
-  const toStr = toDate.toISOString().slice(0, 10);
-
-  const res = await pool.query(
-    `
-    SELECT p.id, p.name, c.name AS category,
-           COALESCE(s.quantity,0) AS start_qty,
-           COALESCE(SUM(i.quantity),0) AS income,
-           COALESCE(SUM(o.quantity),0) AS outcome,
-           COALESCE(s.quantity,0) + COALESCE(SUM(i.quantity),0) - COALESCE(SUM(o.quantity),0) AS end_qty
-    FROM products p
-    LEFT JOIN categories c ON p.category_id = c.id
-    LEFT JOIN stock s ON s.product_id = p.id
-    LEFT JOIN income i ON i.product_id = p.id AND i.date >= $1 AND i.date <= $2
-    LEFT JOIN outcome o ON o.product_id = p.id AND o.date >= $1 AND o.date <= $2
-    GROUP BY p.id, p.name, c.name, s.quantity
-    ORDER BY p.id
-  `,
-    [fromStr, toStr]
-  );
-
+  // Данные
   res.rows.forEach((r, idx) => {
     const row = sheet.addRow(r);
     row.alignment = { vertical: "middle", horizontal: "center" };
+
+    row.eachCell(setBorders);
 
     // Конечный остаток: перекрашивание поверх зебры
     if (r.end_qty === 0) {
@@ -82,11 +105,13 @@ async function generateExcelReport(fromDate, toDate) {
       // Зебра только на строки без окрашивания конечного остатка
       if (idx % 2 === 0) {
         row.eachCell((cell) => {
-          cell.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: { argb: "FFEAF1FB" },
-          };
+          if (!cell.fill) {
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: "FFEAF1FB" },
+            };
+          }
         });
       }
     }
@@ -103,6 +128,8 @@ async function generateExcelReport(fromDate, toDate) {
   legend.forEach((l, i) => {
     const row = sheet.addRow(l);
     row.alignment = { vertical: "middle", horizontal: "center" };
+    row.eachCell(setBorders);
+
     if (i === 1)
       row.getCell(3).fill = {
         type: "pattern",
@@ -126,13 +153,6 @@ async function generateExcelReport(fromDate, toDate) {
     });
     column.width = maxLength + 2;
   });
-
-  // Заголовок с датами отчета
-  sheet.insertRow(1, [`Отчет с ${fromStr} по ${toStr}`]);
-  sheet.mergeCells(1, 1, 1, sheet.columns.length);
-  const headerRow = sheet.getRow(1);
-  headerRow.font = { bold: true, size: 14 };
-  headerRow.alignment = { vertical: "middle", horizontal: "center" };
 
   const filePath = path.join(REPORTS_DIR, `stock_report_${Date.now()}.xlsx`);
   await workbook.xlsx.writeFile(filePath);
