@@ -51,7 +51,7 @@ bot.action("menu_products", async (ctx) => {
 });
 
 // Регистрируем обработку пагинации для товаров
-registerProductPagination(bot);
+require("./handlers/products/list")(bot);
 
 // Остальные обработчики продуктов
 viewProduct(bot);
