@@ -2,6 +2,7 @@ const ExcelJS = require("exceljs");
 const path = require("path");
 const fs = require("fs");
 const pool = require("../../db");
+const logUserAction = require("../../utils/logUserAction");
 
 const REPORTS_DIR = path.join(__dirname, "../../reports");
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });

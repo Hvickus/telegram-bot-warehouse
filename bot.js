@@ -2,6 +2,7 @@ require("dotenv").config();
 const { Telegraf } = require("telegraf");
 const LocalSession = require("telegraf-session-local");
 const pool = require("./db");
+const registerBotLogger = require("./utils/botLogger");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -47,6 +48,8 @@ bot.start(async (ctx) => {
 
   await ctx.reply("Привет! Добро пожаловать.", keyboard);
 });
+
+registerBotLogger(bot);
 
 // Управление ролями
 require("./handlers/admin/roles")(bot);
