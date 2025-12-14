@@ -9,7 +9,7 @@ const safeEditMessage = require("../../utils/safeEditMessage");
 const REPORTS_DIR = path.join(__dirname, "../../reports");
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
-module.exports = function registerExcelReport(bot) {
+module.exports = function generateExcelReport(bot) {
   // Шаг 1: Запрос периода отчёта
   bot.action("excel_report", async (ctx) => {
     await safeAnswerCbQuery(ctx);
