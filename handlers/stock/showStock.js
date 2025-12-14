@@ -3,16 +3,18 @@ const pool = require("../../db");
 
 const PAGE_SIZE = 10;
 
-module.exports = function registerStock(bot) {
-  async function sendPage(ctx, page) {
+module.exports = function registerStockPagination(bot) {
+  async function sendStockPage(ctx, page = 1) {
     const offset = (page - 1) * PAGE_SIZE;
 
+    // Общее количество товаров
     const countRes = await pool.query("SELECT COUNT(*) FROM stock");
-    const total = Number(countRes.rows[0].count);
+    const total = parseInt(countRes.rows[0].count, 10);
     const totalPages = Math.ceil(total / PAGE_SIZE);
 
+    // Товары для текущей страницы
     const res = await pool.query(
-      `SELECT p.id, p.name, s.quantity
+      `SELECT s.product_id, p.name, s.quantity
        FROM stock s
        JOIN products p ON p.id = s.product_id
        ORDER BY p.id
@@ -20,36 +22,60 @@ module.exports = function registerStock(bot) {
       [PAGE_SIZE, offset]
     );
 
-    let text = `📦 *Остатки на складе* (Страница ${page} из ${totalPages})\n\n`;
+    if (!res.rows.length) {
+      return ctx.editMessageText("На складе нет товаров.");
+    }
+
+    // Формируем текст
+    let text = `📊 *Текущие остатки на складе* (Страница ${page} из ${totalPages}):\n\n`;
     res.rows.forEach((r, i) => {
       text += `${offset + i + 1}. ${r.name} — *${r.quantity}*\n`;
     });
 
+    // Кнопки навигации
     const buttons = [];
+    const navButtons = [];
+    if (page > 1)
+      navButtons.push(
+        Markup.button.callback("⬅️ Назад", `stock_page_${page - 1}`)
+      );
+    if (page < totalPages)
+      navButtons.push(
+        Markup.button.callback("➡️ Вперед", `stock_page_${page + 1}`)
+      );
+    if (navButtons.length > 0) buttons.push(navButtons);
 
-    if (page > 1) {
-      buttons.push(Markup.button.callback("⬅️ Назад", `stock_${page - 1}`));
+    // Кнопка "Назад в меню"
+    buttons.push([Markup.button.callback("🔙 Главное меню", "back_main")]);
+
+    const keyboard = Markup.inlineKeyboard(buttons);
+
+    // Если это callback_query — редактируем сообщение, иначе отправляем новое
+    if (ctx.updateType === "callback_query") {
+      await ctx.editMessageText(text, {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+      });
+    } else {
+      // Создаём временное сообщение для редактирования в будущем
+      const sentMsg = await ctx.reply(text, {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+      });
+      ctx.session.lastStockMessageId = sentMsg.message_id;
     }
-
-    if (page < totalPages) {
-      buttons.push(Markup.button.callback("➡️ Вперёд", `stock_${page + 1}`));
-    }
-
-    buttons.push(Markup.button.callback("🔙 Главное меню", "back_main"));
-
-    await ctx.reply(text, {
-      parse_mode: "Markdown",
-      reply_markup: Markup.inlineKeyboard(buttons, { columns: 2 }),
-    });
   }
 
+  // Показать остатки
   bot.action("show_stock", async (ctx) => {
     await ctx.answerCbQuery();
-    await sendPage(ctx, 1);
+    await sendStockPage(ctx, 1);
   });
 
-  bot.action(/stock_(\d+)/, async (ctx) => {
+  // Навигация
+  bot.action(/stock_page_(\d+)/, async (ctx) => {
     await ctx.answerCbQuery();
-    await sendPage(ctx, Number(ctx.match[1]));
+    const page = parseInt(ctx.match[1], 10);
+    await sendStockPage(ctx, page);
   });
 };
