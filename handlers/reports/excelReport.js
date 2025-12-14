@@ -1,107 +1,81 @@
-const { Markup } = require("telegraf");
-const pool = require("../../db");
-const ExcelJS = require("exceljs");
-const fs = require("fs");
-const path = require("path");
-const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
+async function generateExcelReport(period) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Отчёт по складу");
 
-const reportsDir = path.join(__dirname, "../../reports");
+  // Заголовки с жирным шрифтом и заливкой
+  sheet.columns = [
+    { header: "ID", key: "id", width: 10 },
+    { header: "Название", key: "name", width: 30 },
+    { header: "Категория", key: "category", width: 20 },
+    { header: "Остаток", key: "quantity", width: 12 },
+    { header: "Приход", key: "income", width: 12 },
+    { header: "Списание", key: "outcome", width: 12 },
+  ];
 
-// Создание папки, если не существует
-if (!fs.existsSync(reportsDir)) {
-  fs.mkdirSync(reportsDir);
-}
-
-module.exports = function (bot) {
-  // Выбор периода
-  bot.action("report_excel_period", async (ctx) => {
-    await safeAnswerCbQuery(ctx);
-
-    await ctx.editMessageText("Выберите период для отчёта Excel:", {
-      reply_markup: Markup.inlineKeyboard([
-        [Markup.button.callback("📅 Сегодня", "excel_today")],
-        [Markup.button.callback("📆 Этот месяц", "excel_month")],
-        [Markup.button.callback("🗓 Выбрать период", "excel_custom")],
-        [Markup.button.callback("🔙 Назад", "back_main")],
-      ]),
-    });
+  // Оформление заголовка
+  sheet.getRow(1).eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4472C4" }, // синий фон
+    };
+    cell.alignment = { vertical: "middle", horizontal: "center" };
   });
 
-  // Генерация отчета за сегодня
-  bot.action("excel_today", async (ctx) => {
-    await safeAnswerCbQuery(ctx);
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const end = new Date();
-    await generateExcelReport(ctx, start, end);
-  });
+  // SQL-запрос с фильтром по периоду
+  let dateCondition = "";
+  if (period === "today") dateCondition = "AND i.date >= CURRENT_DATE";
+  else if (period === "month")
+    dateCondition = "AND i.date >= date_trunc('month', CURRENT_DATE)";
+  else dateCondition = "AND i.date >= NOW() - INTERVAL '7 days'";
 
-  // Генерация отчета за месяц
-  bot.action("excel_month", async (ctx) => {
-    await safeAnswerCbQuery(ctx);
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date();
-    await generateExcelReport(ctx, start, end);
-  });
+  const query = `
+    SELECT p.id, p.name, c.name AS category,
+           COALESCE(s.quantity,0) AS quantity,
+           COALESCE(SUM(i.quantity),0) AS income,
+           COALESCE(SUM(o.quantity),0) AS outcome
+    FROM products p
+    LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN stock s ON s.product_id = p.id
+    LEFT JOIN income i ON i.product_id = p.id ${dateCondition.replace(
+      /i.date/g,
+      "i.date"
+    )}
+    LEFT JOIN outcome o ON o.product_id = p.id ${dateCondition.replace(
+      /i.date/g,
+      "o.date"
+    )}
+    GROUP BY p.id, p.name, c.name, s.quantity
+    ORDER BY p.id
+  `;
 
-  // Простой выбор периода (на текущий момент – за 7 дней)
-  bot.action("excel_custom", async (ctx) => {
-    await safeAnswerCbQuery(ctx);
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - 7); // пример: последние 7 дней
-    await generateExcelReport(ctx, start, end);
-  });
+  const res = await pool.query(query);
 
-  async function generateExcelReport(ctx, startDate, endDate) {
-    try {
-      // Получаем данные
-      const res = await pool.query(
-        `
-        SELECT p.name,
-               COALESCE(SUM(i.quantity),0) AS income,
-               COALESCE(SUM(o.quantity),0) AS outcome,
-               COALESCE(s.quantity,0) AS stock
-        FROM products p
-        LEFT JOIN income i ON i.product_id = p.id AND i.date >= $1 AND i.date <= $2
-        LEFT JOIN outcome o ON o.product_id = p.id AND o.date >= $1 AND o.date <= $2
-        LEFT JOIN stock s ON s.product_id = p.id
-        GROUP BY p.id, p.name, s.quantity
-        ORDER BY p.name
-        `,
-        [startDate, endDate]
-      );
+  res.rows.forEach((r) => {
+    const row = sheet.addRow(r);
 
-      const workbook = new ExcelJS.Workbook();
-      const sheet = workbook.addWorksheet("Отчёт по складу");
-
-      // Заголовки
-      sheet.columns = [
-        { header: "Товар", key: "name", width: 30 },
-        { header: "Приход", key: "income", width: 15 },
-        { header: "Списание", key: "outcome", width: 15 },
-        { header: "Остаток на складе", key: "stock", width: 20 },
-      ];
-
-      res.rows.forEach((row) => {
-        sheet.addRow({
-          name: row.name,
-          income: row.income,
-          outcome: row.outcome,
-          stock: row.stock,
-        });
-      });
-
-      const fileName = `warehouse_report_${Date.now()}.xlsx`;
-      const filePath = path.join(reportsDir, fileName);
-
-      await workbook.xlsx.writeFile(filePath);
-
-      await ctx.replyWithDocument({ source: filePath, filename: "Отчёт.xlsx" });
-    } catch (err) {
-      console.error("Ошибка генерации Excel отчёта:", err);
-      await ctx.reply("❌ Ошибка при генерации отчёта.");
+    // Выделяем товары с остатком <5 красным цветом
+    if (r.quantity < 5) {
+      row.getCell("quantity").font = {
+        color: { argb: "FFFF0000" },
+        bold: true,
+      };
     }
-  }
-};
+  });
+
+  // Альтернативная окраска строк для удобства чтения
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber > 1 && rowNumber % 2 === 0) {
+      row.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFEAF1FB" }, // светло-синий фон
+      };
+    }
+  });
+
+  const filePath = path.join(reportsFolder, `stock_report_${period}.xlsx`);
+  await workbook.xlsx.writeFile(filePath);
+  return filePath;
+}
