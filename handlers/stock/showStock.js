@@ -3,17 +3,16 @@ const { Markup } = require("telegraf");
 
 const PAGE_SIZE = 10; // показывать по 10 товаров на странице
 
-// Функция для отображения страницы остатков
 async function sendStockPage(ctx, page = 0) {
   try {
+    await ctx.answerCbQuery(); // подтверждаем callback
+
     const offset = page * PAGE_SIZE;
 
-    // Общее количество товаров
     const countRes = await pool.query("SELECT COUNT(*) FROM products");
     const totalProducts = parseInt(countRes.rows[0].count, 10);
     const totalPages = Math.ceil(totalProducts / PAGE_SIZE);
 
-    // Получаем товары с текущими остатками
     const res = await pool.query(
       `
       SELECT p.id, p.name, c.name AS category, COALESCE(s.quantity, 0) AS current_stock
@@ -37,7 +36,6 @@ async function sendStockPage(ctx, page = 0) {
       ),
     ]);
 
-    // Навигационные кнопки
     const navButtons = [];
     if (page > 0)
       navButtons.push(
@@ -51,7 +49,7 @@ async function sendStockPage(ctx, page = 0) {
 
     buttons.push([Markup.button.callback("🔙 Главное меню", "back_main")]);
 
-    await ctx.reply(
+    await ctx.editMessageText(
       `📦 *Остатки товаров*\n\nСтраница ${page + 1} из ${totalPages}`,
       {
         parse_mode: "Markdown",
@@ -64,9 +62,10 @@ async function sendStockPage(ctx, page = 0) {
   }
 }
 
-// Функция для отображения карточки товара
 async function sendStockCard(ctx, productId) {
   try {
+    await ctx.answerCbQuery(); // подтверждаем callback
+
     const res = await pool.query(
       `
       SELECT p.id, p.name, c.name AS category, COALESCE(s.quantity, 0) AS current_stock
@@ -85,7 +84,7 @@ async function sendStockCard(ctx, productId) {
       product.category || "-"
     }\nТекущий остаток: ${product.current_stock}`;
 
-    await ctx.reply(text, {
+    await ctx.editMessageText(text, {
       parse_mode: "Markdown",
       ...Markup.inlineKeyboard([
         [Markup.button.callback("🔙 Назад к списку", "show_stock")],
@@ -98,16 +97,13 @@ async function sendStockCard(ctx, productId) {
 }
 
 module.exports = function (bot) {
-  // Отображение списка остатков (первая страница)
   bot.action("show_stock", async (ctx) => sendStockPage(ctx, 0));
 
-  // Навигация по страницам
   bot.action(/stock_page_(\d+)/, async (ctx) => {
     const page = parseInt(ctx.match[1], 10);
     await sendStockPage(ctx, page);
   });
 
-  // Просмотр карточки товара
   bot.action(/stock_view_(\d+)/, async (ctx) => {
     const productId = parseInt(ctx.match[1], 10);
     await sendStockCard(ctx, productId);
