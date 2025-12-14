@@ -4,7 +4,6 @@ const pool = require("../../db");
 const PAGE_SIZE = 10;
 
 module.exports = function registerStockPagination(bot) {
-  // Функция вывода страницы остатков
   async function sendStockPage(ctx, page = 1) {
     const offset = (page - 1) * PAGE_SIZE;
 
@@ -13,11 +12,7 @@ module.exports = function registerStockPagination(bot) {
     const total = parseInt(countRes.rows[0].count, 10);
     const totalPages = Math.ceil(total / PAGE_SIZE);
 
-    if (total === 0) {
-      return ctx.reply("На складе нет товаров.");
-    }
-
-    // Получаем товары текущей страницы
+    // Товары для текущей страницы
     const res = await pool.query(
       `SELECT s.product_id, p.name, s.quantity
        FROM stock s
@@ -26,6 +21,23 @@ module.exports = function registerStockPagination(bot) {
        LIMIT $1 OFFSET $2`,
       [PAGE_SIZE, offset]
     );
+
+    if (!res.rows.length) {
+      const msg = "На складе нет товаров.";
+      if (ctx.session?.lastStockMessageId) {
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          ctx.session.lastStockMessageId,
+          undefined,
+          msg
+        );
+      } else {
+        const sent = await ctx.reply(msg);
+        ctx.session = ctx.session || {};
+        ctx.session.lastStockMessageId = sent.message_id;
+      }
+      return;
+    }
 
     // Формируем текст
     let text = `📊 *Текущие остатки на складе* (Страница ${page} из ${totalPages}):\n\n`;
@@ -36,7 +48,6 @@ module.exports = function registerStockPagination(bot) {
     // Кнопки навигации
     const buttons = [];
     const navButtons = [];
-
     if (page > 1)
       navButtons.push(
         Markup.button.callback("⬅️ Назад", `stock_page_${page - 1}`)
@@ -45,19 +56,36 @@ module.exports = function registerStockPagination(bot) {
       navButtons.push(
         Markup.button.callback("➡️ Вперед", `stock_page_${page + 1}`)
       );
+    if (navButtons.length) buttons.push(navButtons);
 
-    if (navButtons.length > 0) buttons.push(navButtons);
-
-    // Кнопка назад в меню
+    // Кнопка "Главное меню"
     buttons.push([Markup.button.callback("🔙 Главное меню", "back_main")]);
 
     const keyboard = Markup.inlineKeyboard(buttons);
 
-    // Отправляем новое сообщение с кнопками
-    await ctx.replyWithMarkdown(text, { reply_markup: keyboard });
+    // Отправка или редактирование сообщения
+    if (
+      ctx.session?.lastStockMessageId &&
+      ctx.updateType === "callback_query"
+    ) {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        ctx.session.lastStockMessageId,
+        undefined,
+        text,
+        { parse_mode: "Markdown", reply_markup: keyboard }
+      );
+    } else {
+      const sent = await ctx.reply(text, {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+      });
+      ctx.session = ctx.session || {};
+      ctx.session.lastStockMessageId = sent.message_id;
+    }
   }
 
-  // Кнопка "Показать остатки"
+  // Показать остатки
   bot.action("show_stock", async (ctx) => {
     await ctx.answerCbQuery();
     await sendStockPage(ctx, 1);
