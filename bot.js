@@ -29,10 +29,21 @@ bot.start(async (ctx) => {
   });
 });
 
+const generateAdvancedStockReport = require("./utils/generateExcelReportAdvanced");
+
+bot.command("advreport", async (ctx) => {
+  try {
+    const filePath = await generateAdvancedStockReport();
+    await ctx.replyWithDocument({ source: filePath, filename: "advanced_stock_report.xlsx" });
+  } catch (err) {
+    console.error("Ошибка продвинутого отчёта:", err);
+    ctx.reply("Ошибка при формировании продвинутого Excel отчёта.");
+  }
+});
+
+
 
 require("./handlers/navigation")(bot);
-
-
 require("./handlers/products/list")(bot);
 require("./handlers/products/view")(bot);
 require("./handlers/products/add")(bot);
@@ -58,3 +69,5 @@ bot.launch().then(() => {
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
+
+
