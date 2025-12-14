@@ -3,61 +3,57 @@ const pool = require("../../db");
 const replyOrEdit = require("../../utils/replyOrEdit");
 const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
 
-const PAGE_SIZE = 10;
+const pageSize = 10; // показываем по 10 товаров
 
-module.exports = function (bot) {
-  /**
-   * Функция для формирования клавиатуры с товарами и навигацией
-   */
-  async function sendProductPage(ctx, page = 0) {
-    await safeAnswerCbQuery(ctx);
+async function sendProductPage(ctx, page = 0) {
+  const offset = page * pageSize;
 
-    // Получаем общее количество товаров
-    const { rows: countRows } = await pool.query(
-      "SELECT COUNT(*) AS count FROM products"
-    );
-    const total = parseInt(countRows[0].count, 10);
+  const { rows, rowCount } = await pool.query(
+    `SELECT p.id, p.name, c.name AS category
+     FROM products p
+     LEFT JOIN categories c ON p.category_id = c.id
+     ORDER BY p.id
+     LIMIT $1 OFFSET $2`,
+    [pageSize, offset]
+  );
 
-    // Получаем товары для текущей страницы
-    const offset = page * PAGE_SIZE;
-    const { rows } = await pool.query(
-      "SELECT id, name, description FROM products ORDER BY id LIMIT $1 OFFSET $2",
-      [PAGE_SIZE, offset]
-    );
-
-    if (rows.length === 0) {
-      return ctx.reply("Товары не найдены на этой странице.");
-    }
-
-    const buttons = rows.map((p) => [
-      Markup.button.callback(p.name, `product_view_${p.id}`),
-    ]);
-
-    // Кнопки навигации
-    const navButtons = [];
-    if (page > 0)
-      navButtons.push(
-        Markup.button.callback("⬅️ Назад", `product_page_${page - 1}`)
-      );
-    if (offset + PAGE_SIZE < total)
-      navButtons.push(
-        Markup.button.callback("➡️ Вперёд", `product_page_${page + 1}`)
-      );
-
-    if (navButtons.length) buttons.push(navButtons);
-
-    await replyOrEdit(ctx, "📦 Список товаров:", {
-      reply_markup: Markup.inlineKeyboard(buttons),
-    });
+  if (rows.length === 0) {
+    return ctx.reply("❌ Товары не найдены.");
   }
 
-  // Начало просмотра списка
+  const buttons = rows.map((product) => [
+    Markup.button.callback(product.name, `product_view_${product.id}`),
+  ]);
+
+  // Добавляем кнопки навигации
+  const navButtons = [];
+  if (page > 0)
+    navButtons.push(
+      Markup.button.callback("⬅️ Назад", `products_page_${page - 1}`)
+    );
+  if (offset + rows.length < rowCount)
+    navButtons.push(
+      Markup.button.callback("➡️ Вперед", `products_page_${page + 1}`)
+    );
+
+  if (navButtons.length > 0) buttons.push(navButtons);
+
+  const text = "📦 *Меню товаров:*";
+
+  await replyOrEdit(ctx, text, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard(buttons),
+  });
+}
+
+module.exports = function (bot) {
   bot.action("products_list", async (ctx) => {
+    await safeAnswerCbQuery(ctx);
     await sendProductPage(ctx, 0);
   });
 
-  // Постраничная навигация
-  bot.action(/product_page_(\d+)/, async (ctx) => {
+  bot.action(/products_page_(\d+)/, async (ctx) => {
+    await safeAnswerCbQuery(ctx);
     const page = parseInt(ctx.match[1], 10);
     await sendProductPage(ctx, page);
   });
