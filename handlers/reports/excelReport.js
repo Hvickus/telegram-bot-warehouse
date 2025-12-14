@@ -6,12 +6,6 @@ const path = require("path");
 const REPORTS_DIR = path.join(__dirname, "../../reports");
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
-/**
- * Генерация Excel отчёта
- * @param {Date} fromDate
- * @param {Date} toDate
- * @returns {string} путь к файлу
- */
 async function generateExcelReport(fromDate, toDate) {
   if (!(fromDate instanceof Date) || !(toDate instanceof Date)) {
     throw new Error(
@@ -21,6 +15,17 @@ async function generateExcelReport(fromDate, toDate) {
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Отчёт по складу");
+
+  // Дата отчёта
+  sheet.addRow([
+    `Отчёт с ${fromDate.toISOString().slice(0, 10)} по ${toDate
+      .toISOString()
+      .slice(0, 10)}`,
+  ]);
+  sheet.mergeCells("A1:G1");
+  sheet.getCell("A1").alignment = { horizontal: "center" };
+  sheet.getCell("A1").font = { bold: true };
+  sheet.addRow([]);
 
   // Заголовки столбцов
   sheet.columns = [
@@ -33,16 +38,16 @@ async function generateExcelReport(fromDate, toDate) {
     { header: "Остаток на конец", key: "end_qty", width: 15 },
   ];
 
-  // Дата отчёта
-  sheet.addRow([]);
-  sheet.insertRow(1, [
-    `Отчёт с ${fromDate.toISOString().slice(0, 10)} по ${toDate
-      .toISOString()
-      .slice(0, 10)}`,
-  ]);
-  sheet.mergeCells("A1:G1");
-  sheet.getCell("A1").alignment = { horizontal: "center" };
-  sheet.getCell("A1").font = { bold: true };
+  // Стили заголовка
+  sheet.getRow(3).eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4472C4" },
+    };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+  });
 
   // Получаем данные
   const res = await pool.query(
@@ -64,52 +69,59 @@ async function generateExcelReport(fromDate, toDate) {
   );
 
   // Добавляем строки
-  res.rows.forEach((r) => {
+  res.rows.forEach((r, index) => {
     const row = sheet.addRow(r);
 
-    // Раскраска по конечному остатку
+    // Зебра
+    if ((index + 1) % 2 === 0) {
+      row.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFEAF1FB" },
+      };
+    }
+
+    // Окраска конечного остатка
     const end = r.end_qty;
     if (end === 0)
       row.getCell("end_qty").fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFFF0000" },
-      }; // красный
+      };
     else if (end > 0 && end < 50)
       row.getCell("end_qty").fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFFFA500" },
-      }; // оранжевый
+      };
     else if (end < 0)
       row.getCell("end_qty").fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFB0B0B0" },
-      }; // серый
+      };
 
-    // Выравнивание по центру
+    // Центрирование
     row.eachCell((cell) => {
       cell.alignment = { horizontal: "center", vertical: "middle" };
     });
   });
 
-  // Легенда
-  const legendStartRow = sheet.rowCount + 2;
+  // Легенда цветов
   sheet.addRow([]);
-  sheet.addRow(["Легенда по цветам:"]);
+  sheet.addRow(["Легенда цветов:"]);
   sheet.addRow(["Красный", "– 0 остатка"]);
   sheet.addRow(["Оранжевый", "– менее 50"]);
   sheet.addRow(["Серый", "– отрицательный остаток"]);
-
-  // Выравнивание легенды
+  const legendStartRow = sheet.rowCount - 3;
   for (let i = legendStartRow; i <= sheet.rowCount; i++) {
     sheet.getRow(i).eachCell((cell) => {
       cell.alignment = { horizontal: "left", vertical: "middle" };
     });
   }
 
-  // Автоширина столбцов
+  // Автоширина
   sheet.columns.forEach((col) => {
     let maxLength = col.header.length;
     col.eachCell({ includeEmpty: true }, (cell) => {
