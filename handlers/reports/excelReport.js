@@ -95,12 +95,34 @@ async function generateExcelReport(fromDate, toDate) {
     }
 
     // Цвета по количеству для start_qty и end_qty
+    // Цвета по количеству для start_qty и end_qty
     ["start_qty", "end_qty"].forEach((k) => {
       const cell = row.getCell(k);
+
       if (cell.value === 0) {
-        cell.font = { color: { argb: "FFFF0000" }, bold: true };
+        // Красный фон
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFF0000" },
+        };
+        cell.font = { color: { argb: "FFFFFFFF" }, bold: true }; // белый текст
       } else if (cell.value < 50) {
-        cell.font = { color: { argb: "FFFFA500" }, bold: true };
+        // Оранжевый фон
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFA500" },
+        };
+        cell.font = { color: { argb: "FF000000" }, bold: true }; // черный текст
+      } else {
+        // Белый фон (по умолчанию)
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFFFFF" },
+        };
+        cell.font = { color: { argb: "FF000000" } };
       }
     });
 
