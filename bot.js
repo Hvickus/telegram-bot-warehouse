@@ -24,9 +24,8 @@ bot.start(async (ctx) => {
   });
 });
 
-
-
 require("./handlers/reports/excelReport")(bot);
+require("./handlers/reports/excelMenu")(bot);
 
 require("./handlers/navigation")(bot);
 require("./handlers/products/list")(bot);
