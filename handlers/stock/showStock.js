@@ -23,7 +23,7 @@ module.exports = function registerStockPagination(bot) {
     );
 
     if (!res.rows.length) {
-      return ctx.editMessageText("На складе нет товаров.");
+      return ctx.reply("На складе нет товаров.");
     }
 
     // Формируем текст сообщения
@@ -36,13 +36,9 @@ module.exports = function registerStockPagination(bot) {
     const buttons = [];
     const navButtons = [];
     if (page > 1)
-      navButtons.push(
-        Markup.button.callback("⬅️ Назад", `stock_page_${page - 1}`)
-      );
+      navButtons.push(Markup.button.callback("⬅️ Назад", `stock_page_${page - 1}`));
     if (page < totalPages)
-      navButtons.push(
-        Markup.button.callback("➡️ Вперед", `stock_page_${page + 1}`)
-      );
+      navButtons.push(Markup.button.callback("➡️ Вперед", `stock_page_${page + 1}`));
 
     if (navButtons.length > 0) buttons.push(navButtons);
 
@@ -51,15 +47,8 @@ module.exports = function registerStockPagination(bot) {
 
     const keyboard = Markup.inlineKeyboard(buttons);
 
-    // Редактируем сообщение, если это callback_query, иначе отправляем новое
-    if (ctx.updateType === "callback_query") {
-      await ctx.editMessageText(text, {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      });
-    } else {
-      await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
-    }
+    // Всегда отправляем новое сообщение (не редактируем старое)
+    await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
   }
 
   // Кнопка "Показать остатки"
