@@ -1,7 +1,7 @@
 const { Markup } = require("telegraf");
 const replyOrEdit = require("../../utils/replyOrEdit");
 const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
-const { generateExcelReport } = require("./excelReport");
+const { registerExcelReport } = require("./excelReport");
 
 module.exports = function (bot) {
   /**
@@ -44,7 +44,7 @@ module.exports = function (bot) {
 
     await replyOrEdit(ctx, "⏳ Формирование отчёта за сегодня...");
 
-    const filePath = await generateExcelReport(from, to);
+    const filePath = await registerExcelReport(from, to);
     await ctx.replyWithDocument({ source: filePath });
   });
 
@@ -60,7 +60,7 @@ module.exports = function (bot) {
 
     await replyOrEdit(ctx, "⏳ Формирование отчёта за текущий месяц...");
 
-    const filePath = await generateExcelReport(from, to);
+    const filePath = await registerExcelReport(from, to);
     await ctx.replyWithDocument({ source: filePath });
   });
 
@@ -105,7 +105,7 @@ module.exports = function (bot) {
     delete s.flow;
 
     await replyOrEdit(ctx, "⏳ Формирование отчёта за выбранный период...");
-    const filePath = await generateExcelReport(from, to);
+    const filePath = await registerExcelReport(from, to);
     await ctx.replyWithDocument({ source: filePath });
   });
 };
