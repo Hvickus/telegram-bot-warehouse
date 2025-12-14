@@ -34,9 +34,7 @@ require("./handlers/reports/excelMenu")(bot);
 require("./handlers/navigation")(bot);
 
 // Продукты (список, просмотр, добавление, редактирование, удаление, управление меню)
-const registerProductPagination = require("./handlers/products/list");
-registerProductPagination(bot);
-
+require("./handlers/products/list")(bot);
 require("./handlers/products/view")(bot);
 require("./handlers/products/add")(bot);
 require("./handlers/products/edit")(bot);
