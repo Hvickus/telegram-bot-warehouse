@@ -24,6 +24,20 @@ bot.start(async (ctx) => {
   });
 });
 
+const {
+  showProducts,
+  registerProductPagination,
+} = require("./handlers/products/list");
+
+// При нажатии кнопки "Товары" из главного меню
+bot.action("menu_products", async (ctx) => {
+  ctx.session.productsPage = 1;
+  await showProducts(ctx, 1);
+});
+
+// Регистрируем обработчик кнопок навигации
+registerProductPagination(bot);
+
 require("./handlers/reports/excelMenu")(bot);
 
 require("./handlers/navigation")(bot);
