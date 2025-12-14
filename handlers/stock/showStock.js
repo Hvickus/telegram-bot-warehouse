@@ -1,18 +1,30 @@
 const { Markup } = require("telegraf");
 const pool = require("../../db");
+const replyOrEdit = require("../../utils/replyOrEdit");
+const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
 
 const ITEMS_PER_PAGE = 10;
 
 module.exports = function registerStockPagination(bot) {
   async function sendStockPage(ctx, page = 1) {
+    await safeAnswerCbQuery(ctx);
+
     const offset = (page - 1) * ITEMS_PER_PAGE;
 
-    // Общее количество товаров на складе
+    // Получаем общее количество товаров на складе
     const countRes = await pool.query("SELECT COUNT(*) AS total FROM stock");
     const totalItems = parseInt(countRes.rows[0].total, 10);
     const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
 
-    if (totalPages === 0) return ctx.reply("❗ На складе нет товаров.");
+    if (totalItems === 0) {
+      return replyOrEdit(
+        ctx,
+        "📦 На складе нет товаров.",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("🔙 Назад", "menu_stock")],
+        ])
+      );
+    }
 
     if (page < 1) page = 1;
     if (page > totalPages) page = totalPages;
@@ -27,10 +39,10 @@ module.exports = function registerStockPagination(bot) {
       [ITEMS_PER_PAGE, offset]
     );
 
-    // Формируем текст
-    let text = `📊 *Текущие остатки на складе* (Страница ${page} из ${totalPages}):\n\n`;
+    // Формируем текст сообщения
+    let message = `📊 *Текущие остатки на складе* (Страница ${page} из ${totalPages})\n\n`;
     res.rows.forEach((r, i) => {
-      text += `${offset + i + 1}. ${r.name} — *${r.quantity}*\n`;
+      message += `${offset + i + 1}. ${r.name} — *${r.quantity}*\n`;
     });
 
     // Кнопки навигации
@@ -46,42 +58,23 @@ module.exports = function registerStockPagination(bot) {
       );
     if (navButtons.length) buttons.push(navButtons);
 
-    // Кнопка "Главное меню"
-    buttons.push([Markup.button.callback("🔙 Главное меню", "back_main")]);
+    // Кнопка "Назад в меню остатков"
+    buttons.push([Markup.button.callback("🔙 Назад", "menu_stock")]);
 
-    const keyboard = Markup.inlineKeyboard(buttons);
-
-    // Редактируем сообщение, если оно уже есть, иначе отправляем новое
-    if (
-      ctx.session?.lastStockMessageId &&
-      ctx.updateType === "callback_query"
-    ) {
-      await ctx.telegram.editMessageText(
-        ctx.chat.id,
-        ctx.session.lastStockMessageId,
-        undefined,
-        text,
-        { parse_mode: "Markdown", reply_markup: keyboard }
-      );
-    } else {
-      const sent = await ctx.reply(text, {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      });
-      ctx.session = ctx.session || {};
-      ctx.session.lastStockMessageId = sent.message_id;
-    }
+    await replyOrEdit(
+      ctx,
+      message,
+      Markup.inlineKeyboard(buttons, { columns: 1 })
+    );
   }
 
-  // Показать остатки
+  // Старт просмотра остатков
   bot.action("show_stock", async (ctx) => {
-    await ctx.answerCbQuery();
     await sendStockPage(ctx, 1);
   });
 
-  // Навигация по страницам
+  // Пагинация
   bot.action(/stock_page_(\d+)/, async (ctx) => {
-    await ctx.answerCbQuery();
     const page = parseInt(ctx.match[1], 10);
     await sendStockPage(ctx, page);
   });

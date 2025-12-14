@@ -3,6 +3,8 @@ const pool = require("../../db");
 const replyOrEdit = require("../../utils/replyOrEdit");
 const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
 
+const ITEMS_PER_PAGE = 10;
+
 function resetAddSession(session) {
   if (!session) return;
   delete session.flow;
@@ -38,25 +40,20 @@ module.exports = function (bot) {
 
       // Загружаем категории
       try {
-        const res = await pool.query(
-          "SELECT id, name FROM categories ORDER BY id"
+        const countRes = await pool.query(
+          `SELECT COUNT(*) AS total FROM categories`
         );
-        if (res.rows.length === 0) {
+        const totalCategories = parseInt(countRes.rows[0].total, 10);
+
+        if (totalCategories === 0) {
           s.step = "await_category_manual";
           return ctx.reply("Категорий нет. Введите ID категории вручную:");
         }
 
-        const buttons = res.rows.map((c) => [
-          Markup.button.callback(c.name, `addcat_${c.id}`),
-        ]);
-        buttons.push([Markup.button.callback("❌ Отмена", "cancel_add")]);
         s.step = "await_category";
+        s.categoryPage = 1;
 
-        await replyOrEdit(
-          ctx,
-          "Выберите категорию:",
-          Markup.inlineKeyboard(buttons)
-        );
+        await sendCategoryPage(ctx, s.categoryPage);
       } catch (err) {
         console.error("Ошибка категорий:", err);
         return ctx.reply("Ошибка при загрузке категорий.");
@@ -111,7 +108,51 @@ module.exports = function (bot) {
     }
   });
 
-  // Обработчик кнопок категорий
+  // Отображение страницы категорий
+  async function sendCategoryPage(ctx, page = 1) {
+    const offset = (page - 1) * ITEMS_PER_PAGE;
+    const s = ctx.session;
+
+    const res = await pool.query(
+      `SELECT id, name FROM categories ORDER BY id LIMIT $1 OFFSET $2`,
+      [ITEMS_PER_PAGE, offset]
+    );
+
+    const countRes = await pool.query(
+      `SELECT COUNT(*) AS total FROM categories`
+    );
+    const totalCategories = parseInt(countRes.rows[0].total, 10);
+    const totalPages = Math.ceil(totalCategories / ITEMS_PER_PAGE);
+
+    if (res.rows.length === 0) return ctx.reply("Категории отсутствуют.");
+
+    const buttons = res.rows.map((c) => [
+      Markup.button.callback(c.name, `addcat_${c.id}`),
+    ]);
+
+    // Навигация по страницам категорий
+    const navButtons = [];
+    if (page > 1)
+      navButtons.push(
+        Markup.button.callback("⬅️ Назад", `category_page_${page - 1}`)
+      );
+    if (page < totalPages)
+      navButtons.push(
+        Markup.button.callback("➡️ Вперед", `category_page_${page + 1}`)
+      );
+    if (navButtons.length) buttons.push(navButtons);
+
+    buttons.push([Markup.button.callback("❌ Отмена", "cancel_add")]);
+
+    await replyOrEdit(
+      ctx,
+      "Выберите категорию:",
+      Markup.inlineKeyboard(buttons, { columns: 1 })
+    );
+    s.categoryPage = page;
+  }
+
+  // Обработка выбора категории
   bot.action(/addcat_(.+)/, async (ctx) => {
     await safeAnswerCbQuery(ctx);
     const s = ctx.session;
@@ -122,6 +163,15 @@ module.exports = function (bot) {
     s.step = "await_quantity";
 
     await replyOrEdit(ctx, "Введите количество (целое число):");
+  });
+
+  // Навигация по страницам категорий
+  bot.action(/category_page_(\d+)/, async (ctx) => {
+    await safeAnswerCbQuery(ctx);
+    const page = parseInt(ctx.match[1], 10);
+    const s = ctx.session;
+    if (!s || s.flow !== "add_product" || s.step !== "await_category") return;
+    await sendCategoryPage(ctx, page);
   });
 
   // Отмена добавления
