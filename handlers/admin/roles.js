@@ -1,11 +1,12 @@
-const { Markup } = require("telegraf");
 const pool = require("../../db");
 const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
 const safeEditMessage = require("../../utils/safeEditMessage");
 const rolesMenu = require("../../menus/rolesMenu");
 
+const MAIN_ADMIN_ID = 1111944400; // <-- здесь твой Telegram ID
+
 module.exports = function (bot) {
-  // Главное меню управления администраторами
+  // Главное меню управления ролями
   bot.action("roles_menu", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     const keyboard = await rolesMenu(ctx);
@@ -14,59 +15,58 @@ module.exports = function (bot) {
     });
   });
 
-  // Кнопка "Добавить администратора"
+  // Добавление администратора
   bot.action("add_admin", async (ctx) => {
     await safeAnswerCbQuery(ctx);
+    await safeEditMessage(ctx, "Введите Telegram ID нового администратора:");
     ctx.session = ctx.session || {};
     ctx.session.flow = "add_admin";
-    await safeEditMessage(ctx, "Введите Telegram ID нового администратора:");
   });
 
-  // Ввод ID нового администратора
+  // Обработка ввода Telegram ID
   bot.on("text", async (ctx, next) => {
     const s = ctx.session;
     if (!s || s.flow !== "add_admin") return next();
 
-    const newAdminId = Number(ctx.message.text.trim());
-    if (!Number.isInteger(newAdminId)) {
+    const telegramId = Number(ctx.message.text.trim());
+    if (!Number.isInteger(telegramId)) {
       return ctx.reply("Введите корректный числовой Telegram ID.");
     }
 
-    await pool.query("UPDATE bot_users SET role='admin' WHERE telegram_id=$1", [
-      newAdminId,
-    ]);
-
-    delete ctx.session.flow;
-
-    await ctx.reply("✅ Администратор добавлен.");
-    const keyboard = await rolesMenu(ctx);
-    await safeEditMessage(ctx, "👥 Управление администраторами:", {
-      reply_markup: keyboard,
-    });
+    try {
+      await pool.query(
+        `UPDATE bot_users SET role = 'admin' WHERE telegram_id = $1`,
+        [telegramId]
+      );
+      delete ctx.session.flow;
+      await ctx.reply("✅ Пользователь назначен администратором.");
+    } catch (err) {
+      console.error("Ошибка назначения администратора:", err);
+      await ctx.reply("Ошибка при назначении администратора.");
+    }
   });
 
   // Удаление администратора
-  bot.action(/del_admin_(\d+)/, async (ctx) => {
+  bot.action(/del_admin_(.+)/, async (ctx) => {
     await safeAnswerCbQuery(ctx);
+    const telegramId = Number(ctx.match[1]);
 
-    const adminId = Number(ctx.match[1]);
-    if (adminId === ctx.from.id) {
-      return ctx.reply("❌ Нельзя удалить себя из администраторов!");
+    if (telegramId === MAIN_ADMIN_ID) {
+      return ctx.reply("❌ Главного администратора удалить нельзя.");
     }
 
-    await pool.query("UPDATE bot_users SET role='user' WHERE telegram_id=$1", [
-      adminId,
-    ]);
-
-    await ctx.reply("✅ Администратор удалён.");
-    const keyboard = await rolesMenu(ctx);
-    await safeEditMessage(ctx, "👥 Управление администраторами:", {
-      reply_markup: keyboard,
-    });
-  });
-
-  // Заглушка для noop
-  bot.action("noop", async (ctx) => {
-    await safeAnswerCbQuery(ctx);
+    try {
+      await pool.query(
+        `UPDATE bot_users SET role = 'user' WHERE telegram_id = $1`,
+        [telegramId]
+      );
+      const keyboard = await rolesMenu(ctx);
+      await safeEditMessage(ctx, "✅ Администратор удалён.", {
+        reply_markup: keyboard,
+      });
+    } catch (err) {
+      console.error("Ошибка удаления администратора:", err);
+      await ctx.reply("Ошибка при удалении администратора.");
+    }
   });
 };

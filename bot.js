@@ -5,10 +5,10 @@ const pool = require("./db");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Сессии
+// Локальная сессия
 bot.use(new LocalSession({ database: "session_db.json" }).middleware());
 
-// Проверка БД
+// Проверка подключения к БД
 (async () => {
   try {
     await pool.query("SELECT 1");
@@ -19,7 +19,7 @@ bot.use(new LocalSession({ database: "session_db.json" }).middleware());
   }
 })();
 
-// START
+// Стартовое сообщение с главным меню
 bot.start(async (ctx) => {
   const telegramId = ctx.from.id;
   const username = ctx.from.username || null;
@@ -31,6 +31,17 @@ bot.start(async (ctx) => {
     [telegramId, username]
   );
 
+  // Логирование действия
+  try {
+    await pool.query("SELECT log_user_action($1, $2)", [
+      telegramId,
+      "start_bot",
+    ]);
+  } catch (err) {
+    console.error("Ошибка логирования действия start_bot:", err);
+  }
+
+  // Асинхронное главное меню с учётом роли
   const mainMenu = require("./menus/mainMenu");
   const keyboard = await mainMenu(ctx);
 
@@ -39,11 +50,10 @@ bot.start(async (ctx) => {
   });
 });
 
-// Роли
-
+// Управление ролями
 require("./handlers/admin/roles")(bot);
 
-// Excel
+// Меню Excel отчётов
 require("./handlers/reports/excelMenu")(bot);
 
 // Навигация
@@ -57,10 +67,10 @@ require("./handlers/products/edit")(bot);
 require("./handlers/products/delete")(bot);
 require("./handlers/products/manageMenus")(bot);
 
-// Остатки
+// Остатки на складе с пагинацией
 require("./handlers/stock/showStock")(bot);
 
-// Приход / списание
+// Приход и списание
 require("./handlers/income/incomeAdd")(bot);
 require("./handlers/outcome/outcomeAdd")(bot);
 
@@ -68,10 +78,11 @@ require("./handlers/outcome/outcomeAdd")(bot);
 require("./handlers/reports/lowStock")(bot);
 require("./handlers/reports/movements")(bot);
 
-// Запуск
+// Запуск бота
 bot.launch().then(() => {
   console.log("✅ Бот запущен");
 });
 
+// Корректное завершение работы
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));

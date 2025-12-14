@@ -1,29 +1,34 @@
 const { Markup } = require("telegraf");
 const pool = require("../db");
 
+const MAIN_ADMIN_ID = 1111944400; // <-- здесь укажи свой Telegram ID
+
 module.exports = async function rolesMenu(ctx) {
-  // Получаем список всех администраторов
+  // Получаем список администраторов
   const res = await pool.query(
-    "SELECT telegram_id, username FROM bot_users WHERE role='admin' ORDER BY telegram_id"
+    `SELECT telegram_id, username
+     FROM bot_users
+     WHERE role = 'admin'
+     ORDER BY telegram_id`
   );
 
-  const buttons = res.rows.map((u) => {
-    const canDelete = u.telegram_id !== ctx.from.id; // нельзя удалить себя
+  const buttons = res.rows.map((user) => {
+    const username = user.username ? `@${user.username}` : user.telegram_id;
+    const isMain = user.telegram_id === MAIN_ADMIN_ID;
+    // Если это главный админ, кнопка удаления не отображается
     return [
-      Markup.button.callback(
-        `${u.username || u.telegram_id} ${canDelete ? "❌" : ""}`,
-        canDelete ? `del_admin_${u.telegram_id}` : "noop"
-      ),
+      Markup.button.callback(username, `admin_${user.telegram_id}`),
+      ...(isMain
+        ? []
+        : [Markup.button.callback("❌", `del_admin_${user.telegram_id}`)]),
     ];
   });
 
-  // Кнопка добавления нового админа
+  // Кнопка "Добавить администратора"
   buttons.push([
     Markup.button.callback("➕ Добавить администратора", "add_admin"),
   ]);
-
-  // Кнопка возврата в главное меню
-  buttons.push([Markup.button.callback("🔙 Главное меню", "back_main")]);
+  buttons.push([Markup.button.callback("🔙 Назад", "back_main")]);
 
   return Markup.inlineKeyboard(buttons);
 };

@@ -11,16 +11,19 @@ module.exports = async function mainMenu(ctx) {
     [Markup.button.callback("📈 Excel отчёт", "excel_report")],
   ];
 
-  // Проверяем роль пользователя
-  const res = await pool.query(
-    "SELECT role FROM bot_users WHERE telegram_id = $1",
-    [ctx.from.id]
-  );
+  try {
+    const res = await pool.query(
+      "SELECT role FROM bot_users WHERE telegram_id = $1",
+      [ctx.from.id]
+    );
 
-  if (res.rows[0]?.role === "admin") {
-    buttons.push([
-      Markup.button.callback("👥 Управление ролями", "roles_menu"),
-    ]);
+    if (res.rows[0]?.role === "admin") {
+      buttons.push([
+        Markup.button.callback("👥 Управление ролями", "roles_menu"),
+      ]);
+    }
+  } catch (err) {
+    console.error("Ошибка проверки роли пользователя:", err);
   }
 
   return Markup.inlineKeyboard(buttons);
