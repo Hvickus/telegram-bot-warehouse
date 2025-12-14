@@ -5,10 +5,10 @@ const pool = require("./db");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Локальная сессия
+// Сессии
 bot.use(new LocalSession({ database: "session_db.json" }).middleware());
 
-// Проверка подключения к БД
+// Проверка БД
 (async () => {
   try {
     await pool.query("SELECT 1");
@@ -19,15 +19,31 @@ bot.use(new LocalSession({ database: "session_db.json" }).middleware());
   }
 })();
 
-// Стартовое сообщение с главным меню
+// START
 bot.start(async (ctx) => {
+  const telegramId = ctx.from.id;
+  const username = ctx.from.username || null;
+
+  await pool.query(
+    `INSERT INTO bot_users (telegram_id, username)
+     VALUES ($1, $2)
+     ON CONFLICT (telegram_id) DO NOTHING`,
+    [telegramId, username]
+  );
+
+  await pool.query("SELECT log_user_action($1, $2)", [telegramId, "start_bot"]);
+
   const mainMenu = require("./menus/mainMenu");
-  await ctx.reply("Привет! Добро пожаловать в систему управления складом.", {
-    reply_markup: mainMenu().reply_markup,
+
+  await ctx.reply("Привет! Добро пожаловать.", {
+    reply_markup: await mainMenu(ctx),
   });
 });
 
-// Меню Excel отчётов
+// Роли
+require("./handlers/admin/roles")(bot);
+
+// Excel
 require("./handlers/reports/excelMenu")(bot);
 
 // Навигация
@@ -41,10 +57,10 @@ require("./handlers/products/edit")(bot);
 require("./handlers/products/delete")(bot);
 require("./handlers/products/manageMenus")(bot);
 
-// Остатки на складе с пагинацией
+// Остатки
 require("./handlers/stock/showStock")(bot);
 
-// Приход и списание
+// Приход / списание
 require("./handlers/income/incomeAdd")(bot);
 require("./handlers/outcome/outcomeAdd")(bot);
 
@@ -52,11 +68,10 @@ require("./handlers/outcome/outcomeAdd")(bot);
 require("./handlers/reports/lowStock")(bot);
 require("./handlers/reports/movements")(bot);
 
-// Запуск бота
+// Запуск
 bot.launch().then(() => {
   console.log("✅ Бот запущен");
 });
 
-// Корректное завершение работы
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));

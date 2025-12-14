@@ -12,11 +12,11 @@ module.exports = function (bot) {
   bot.action("back_main", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "Главное меню:", {
-      reply_markup: mainMenu().reply_markup,
+      reply_markup: await mainMenu(ctx),
     });
   });
 
-  // Меню товаров
+  // Товары
   bot.action("menu_products", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📦 Меню товаров:", {
@@ -24,6 +24,7 @@ module.exports = function (bot) {
     });
   });
 
+  // Остатки
   bot.action("menu_stock", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📦 Меню остатков:", {
@@ -31,7 +32,7 @@ module.exports = function (bot) {
     });
   });
 
-  // Меню прихода
+  // Приход
   bot.action("menu_income", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📥 Меню прихода:", {
@@ -39,7 +40,7 @@ module.exports = function (bot) {
     });
   });
 
-  // Меню списания
+  // Списание
   bot.action("menu_outcome", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📤 Меню списания:", {
@@ -47,7 +48,7 @@ module.exports = function (bot) {
     });
   });
 
-  // Меню отчётов
+  // Отчёты
   bot.action("menu_reports", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📊 Меню отчётов:", {
