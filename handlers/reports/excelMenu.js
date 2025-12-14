@@ -33,7 +33,9 @@ module.exports = function (bot) {
 
   bot.action("excel_custom", async (ctx) => {
     await safeAnswerCbQuery(ctx);
-    await ctx.reply("Введите начальную и конечную дату в формате YYYY-MM-DD - YYYY-MM-DD");
+    await ctx.reply(
+      "Введите начальную и конечную дату в формате YYYY-MM-DD - YYYY-MM-DD"
+    );
     // Здесь дальше обрабатываешь текст от пользователя и генерируешь Excel
   });
 };
