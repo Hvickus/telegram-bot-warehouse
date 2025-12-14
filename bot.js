@@ -33,7 +33,7 @@ require("./handlers/reports/excelMenu")(bot);
 // Навигация
 require("./handlers/navigation")(bot);
 
-// Продукты (список, просмотр, добавление, редактирование, удаление, управление меню)
+// Продукты
 require("./handlers/products/list")(bot);
 require("./handlers/products/view")(bot);
 require("./handlers/products/add")(bot);
@@ -41,7 +41,7 @@ require("./handlers/products/edit")(bot);
 require("./handlers/products/delete")(bot);
 require("./handlers/products/manageMenus")(bot);
 
-// Остатки на складе
+// Остатки на складе с пагинацией
 require("./handlers/stock/showStock")(bot);
 
 // Приход и списание

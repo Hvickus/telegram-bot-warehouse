@@ -26,8 +26,6 @@ module.exports = function (bot) {
 
   bot.action("menu_stock", async (ctx) => {
     await safeAnswerCbQuery(ctx);
-
-    // Редактируем сообщение и оставляем кнопку "Показать остатки"
     await safeEditMessage(ctx, "📦 Меню остатков:", {
       reply_markup: stockMenu().reply_markup,
     });
