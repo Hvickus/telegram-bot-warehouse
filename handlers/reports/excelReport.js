@@ -7,6 +7,12 @@ const reportsFolder = path.join(__dirname, "../../reports");
 if (!fs.existsSync(reportsFolder))
   fs.mkdirSync(reportsFolder, { recursive: true });
 
+/**
+ * Генерация Excel отчёта
+ * @param {Date} fromDate
+ * @param {Date} toDate
+ * @returns {Promise<string>} Путь к файлу
+ */
 async function generateExcelReport(fromDate, toDate) {
   if (!(fromDate instanceof Date) || !(toDate instanceof Date)) {
     throw new Error(
@@ -17,116 +23,69 @@ async function generateExcelReport(fromDate, toDate) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Отчёт по складу");
 
-  // Заголовки
-  const headers = [
+  // Заголовки таблицы
+  sheet.columns = [
     { header: "ID", key: "id" },
     { header: "Название", key: "name" },
     { header: "Категория", key: "category" },
-    { header: "Начало периода", key: "start_qty" },
+    { header: "Остаток на начало", key: "start_qty" },
     { header: "Приход", key: "income" },
     { header: "Списание", key: "outcome" },
-    { header: "Конец периода", key: "end_qty" },
+    { header: "Остаток на конец", key: "end_qty" },
   ];
 
-  sheet.columns = headers.map((h) => ({
-    ...h,
-    width: h.header.length + 5,
-    alignment: { horizontal: "center", vertical: "middle" },
-  }));
-
-  // Стиль заголовка
-  const headerRow = sheet.getRow(1);
-  headers.forEach((_, idx) => {
-    const cell = headerRow.getCell(idx + 1);
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    cell.fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FF4472C4" },
-    };
-    cell.alignment = { horizontal: "center", vertical: "middle" };
-    cell.border = {
-      top: { style: "thin" },
-      left: { style: "thin" },
-      bottom: { style: "thin" },
-      right: { style: "thin" },
-    };
+  // Выравнивание и автоширина
+  sheet.columns.forEach((col) => {
+    col.alignment = { horizontal: "center", vertical: "middle" };
   });
 
-  // SQL запрос
+  // Данные по товарам с остатками
   const res = await pool.query(
     `
-    SELECT 
-      p.id, 
-      p.name, 
-      c.name AS category,
-      COALESCE(s.quantity,0)
-        + COALESCE((SELECT SUM(i.quantity) FROM income i WHERE i.product_id = p.id AND i.date < $1),0)
-        - COALESCE((SELECT SUM(o.quantity) FROM outcome o WHERE o.product_id = p.id AND o.date < $1),0) AS start_qty,
-      COALESCE(SUM(i.quantity),0) AS income,
-      COALESCE(SUM(o.quantity),0) AS outcome,
-      COALESCE(s.quantity,0)
-        + COALESCE((SELECT SUM(i.quantity) FROM income i WHERE i.product_id = p.id AND i.date <= $2),0)
-        - COALESCE((SELECT SUM(o.quantity) FROM outcome o WHERE o.product_id = p.id AND o.date <= $2),0) AS end_qty
+    SELECT p.id, p.name, c.name AS category,
+           COALESCE(s_start.quantity,0) AS start_qty,
+           COALESCE(SUM(i.quantity),0) AS income,
+           COALESCE(SUM(o.quantity),0) AS outcome,
+           COALESCE(s_end.quantity,0) AS end_qty
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
-    LEFT JOIN stock s ON s.product_id = p.id
+    LEFT JOIN stock s_start ON s_start.product_id = p.id
+      AND s_start.date <= $1
+    LEFT JOIN stock s_end ON s_end.product_id = p.id
+      AND s_end.date <= $2
     LEFT JOIN income i ON i.product_id = p.id AND i.date >= $1 AND i.date <= $2
     LEFT JOIN outcome o ON o.product_id = p.id AND o.date >= $1 AND o.date <= $2
-    GROUP BY p.id, p.name, c.name, s.quantity
+    GROUP BY p.id, p.name, c.name, s_start.quantity, s_end.quantity
     ORDER BY p.id
     `,
     [fromDate, toDate]
   );
 
-  // Добавляем строки с данными
-  res.rows.forEach((r, idx) => {
+  // Добавляем строки
+  res.rows.forEach((r, index) => {
     const row = sheet.addRow(r);
 
-    // Зебра
-    if (idx % 2 === 1) {
-      headers.forEach((_, colIdx) => {
-        row.getCell(colIdx + 1).fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FFEAF1FB" },
-        };
-      });
-    }
-
-    // Цвета по количеству для start_qty и end_qty
-    // Цвета по количеству для start_qty и end_qty
-    ["start_qty", "end_qty"].forEach((k) => {
-      const cell = row.getCell(k);
-
+    // Раскраска остатков
+    ["start_qty", "end_qty"].forEach((key) => {
+      const cell = row.getCell(key);
       if (cell.value === 0) {
-        // Красный фон
         cell.fill = {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: "FFFF0000" },
-        };
-        cell.font = { color: { argb: "FFFFFFFF" }, bold: true }; // белый текст
+        }; // красный
+        cell.font = { color: { argb: "FFFFFFFF" }, bold: true };
       } else if (cell.value < 50) {
-        // Оранжевый фон
         cell.fill = {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: "FFFFA500" },
-        };
-        cell.font = { color: { argb: "FF000000" }, bold: true }; // черный текст
-      } else {
-        // Белый фон (по умолчанию)
-        cell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FFFFFFFF" },
-        };
-        cell.font = { color: { argb: "FF000000" } };
+        }; // оранжевый
+        cell.font = { color: { argb: "FF000000" }, bold: true };
       }
     });
 
-    // Границы всех ячеек
+    // Границы
     row.eachCell({ includeEmpty: true }, (cell) => {
       cell.border = {
         top: { style: "thin" },
@@ -137,64 +96,60 @@ async function generateExcelReport(fromDate, toDate) {
     });
   });
 
-  // Автоширина для всех колонок
-  sheet.columns.forEach((column) => {
-    let maxLength = column.header.length;
-    column.eachCell({ includeEmpty: true }, (cell) => {
-      const len = cell.value ? cell.value.toString().length : 0;
-      if (len > maxLength) maxLength = len;
-    });
-    column.width = maxLength + 5;
+  // Заголовки жирные и синие
+  const headerRow = sheet.getRow(1);
+  headerRow.height = 25;
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4472C4" },
+    };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+  });
+
+  // Зебра
+  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber > 1 && rowNumber % 2 === 0) {
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        if (!cell.fill || cell.fill.fgColor.argb === "FFFFFFFF") {
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFEAF1FB" },
+          };
+        }
+      });
+    }
   });
 
   // Легенда справа
-  const legendCol = headers.length + 2;
+  const legendColStart = sheet.columns.length + 2;
   const legend = [
-    ["Цвет", "Обозначение"],
-    ["Красный", "Остаток = 0"],
-    ["Оранжевый", "Остаток < 50"],
-    ["Белый", "Остаток >= 50"],
+    ["Легенда:"],
+    ["0 – красный: нулевой остаток"],
+    ["<50 – оранжевый: малый остаток"],
+    [">=50 – белый: нормальный остаток"],
   ];
-  legend.forEach((r, i) => {
-    const excelRow = sheet.getRow(i + 2);
-    r.forEach((val, j) => {
-      const cell = excelRow.getCell(legendCol + j);
-      cell.value = val;
-
-      // Цвет только для первой колонки
-      if (j === 0) {
-        const colorMap = {
-          Красный: "FFFF0000",
-          Оранжевый: "FFFFA500",
-          Белый: "FFFFFFFF",
-        };
-        cell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: colorMap[val] },
-        };
-      }
-
-      cell.font = { bold: i === 0 };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.border = {
-        top: { style: "thin" },
-        left: { style: "thin" },
-        bottom: { style: "thin" },
-        right: { style: "thin" },
-      };
-    });
+  legend.forEach((rowVals, idx) => {
+    const row = sheet.getRow(idx + 2);
+    row.getCell(legendColStart).value = rowVals[0];
+    row.getCell(legendColStart).alignment = {
+      horizontal: "left",
+      vertical: "middle",
+    };
   });
 
-  // Автоширина для легенды
-  for (let j = legendCol; j <= legendCol + 1; j++) {
-    let maxLength = 0;
-    sheet.getColumn(j).eachCell({ includeEmpty: true }, (cell) => {
-      const len = cell.value ? cell.value.toString().length : 0;
-      if (len > maxLength) maxLength = len;
+  // Автоширина
+  sheet.columns.forEach((col) => {
+    let maxLength = 10;
+    col.eachCell({ includeEmpty: true }, (cell) => {
+      const l = cell.value ? cell.value.toString().length : 0;
+      if (l > maxLength) maxLength = l;
     });
-    sheet.getColumn(j).width = maxLength + 5;
-  }
+    col.width = maxLength + 2;
+  });
 
   const fileName = `stock_report_${Date.now()}.xlsx`;
   const filePath = path.join(reportsFolder, fileName);
