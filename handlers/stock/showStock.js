@@ -23,7 +23,7 @@ module.exports = function registerStockPagination(bot) {
     );
 
     if (!res.rows.length) {
-      return ctx.editMessageText("На складе нет товаров.");
+      return ctx.reply("На складе нет товаров.");
     }
 
     // Формируем текст
@@ -45,23 +45,25 @@ module.exports = function registerStockPagination(bot) {
       );
     if (navButtons.length > 0) buttons.push(navButtons);
 
-    // Кнопка "Назад в меню"
     buttons.push([Markup.button.callback("🔙 Главное меню", "back_main")]);
-
     const keyboard = Markup.inlineKeyboard(buttons);
 
-    // Если это callback_query — редактируем сообщение, иначе отправляем новое
-    if (ctx.updateType === "callback_query") {
-      await ctx.editMessageText(text, {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      });
+    // Если уже есть message_id в сессии — редактируем его
+    if (ctx.session && ctx.session.lastStockMessageId) {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        ctx.session.lastStockMessageId,
+        undefined,
+        text,
+        { parse_mode: "Markdown", reply_markup: keyboard }
+      );
     } else {
-      // Создаём временное сообщение для редактирования в будущем
+      // Создаём сообщение и сохраняем message_id
       const sentMsg = await ctx.reply(text, {
         parse_mode: "Markdown",
         reply_markup: keyboard,
       });
+      ctx.session = ctx.session || {};
       ctx.session.lastStockMessageId = sentMsg.message_id;
     }
   }
