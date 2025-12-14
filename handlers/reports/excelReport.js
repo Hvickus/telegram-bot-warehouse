@@ -10,7 +10,6 @@ if (!fs.existsSync(reportsFolder)) {
 }
 
 module.exports = function (bot) {
-  // Кнопка "Excel отчёт"
   bot.action("excel_report", async (ctx) => {
     await ctx.answerCbQuery();
     await ctx.editMessageText("Выберите период для Excel отчёта:", {
@@ -27,7 +26,6 @@ module.exports = function (bot) {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Отчёт по складу");
 
-    // Заголовки
     sheet.columns = [
       { header: "ID", key: "id", width: 10 },
       { header: "Название", key: "name", width: 30 },
@@ -38,7 +36,7 @@ module.exports = function (bot) {
       { header: "Конечный остаток", key: "end_qty", width: 15 },
     ];
 
-    // Стили заголовка
+    // Стиль заголовков
     sheet.getRow(1).eachCell((cell) => {
       cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
       cell.fill = {
@@ -79,12 +77,51 @@ module.exports = function (bot) {
 
     res.rows.forEach((r) => {
       const row = sheet.addRow(r);
-      // Красим красным низкий остаток
-      if (r.end_qty < 5) {
-        row.getCell("end_qty").font = {
-          color: { argb: "FFFF0000" },
-          bold: true,
+
+      // Конечный остаток
+      const endCell = row.getCell("end_qty");
+      if (r.end_qty === 0) {
+        endCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFF0000" },
         };
+        endCell.font = { color: { argb: "FFFFFFFF" }, bold: true };
+      } else if (r.end_qty < 5) {
+        endCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFC000" },
+        };
+        endCell.font = { bold: true };
+      } else {
+        endCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF92D050" },
+        };
+      }
+
+      // Условное форматирование прихода
+      const incomeCell = row.getCell("income");
+      if (r.income > 50) {
+        incomeCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF00B050" },
+        };
+        incomeCell.font = { color: { argb: "FFFFFFFF" }, bold: true };
+      }
+
+      // Условное форматирование списания
+      const outcomeCell = row.getCell("outcome");
+      if (r.outcome > 50) {
+        outcomeCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFF0000" },
+        };
+        outcomeCell.font = { color: { argb: "FFFFFFFF" }, bold: true };
       }
     });
 
@@ -99,16 +136,69 @@ module.exports = function (bot) {
       }
     });
 
+    // Легенда цветов
+    const legendRow = sheet.rowCount + 2;
+    sheet.getCell(`A${legendRow}`).value = "Легенда:";
+    sheet.getCell(`A${legendRow}`).font = { bold: true };
+
+    sheet.getCell(`B${legendRow}`).value =
+      "Конечный остаток = 0 (нет на складе)";
+    sheet.getCell(`B${legendRow}`).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFF0000" },
+    };
+    sheet.getCell(`B${legendRow}`).font = {
+      color: { argb: "FFFFFFFF" },
+      bold: true,
+    };
+
+    sheet.getCell(`B${legendRow + 1}`).value =
+      "Конечный остаток < 5 (мало на складе)";
+    sheet.getCell(`B${legendRow + 1}`).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFFC000" },
+    };
+
+    sheet.getCell(`B${legendRow + 2}`).value = "Конечный остаток ≥ 5 (в норме)";
+    sheet.getCell(`B${legendRow + 2}`).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF92D050" },
+    };
+
+    sheet.getCell(`B${legendRow + 3}`).value = "Приход > 50 (большой приход)";
+    sheet.getCell(`B${legendRow + 3}`).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF00B050" },
+    };
+    sheet.getCell(`B${legendRow + 3}`).font = {
+      color: { argb: "FFFFFFFF" },
+      bold: true,
+    };
+
+    sheet.getCell(`B${legendRow + 4}`).value =
+      "Списание > 50 (большое списание)";
+    sheet.getCell(`B${legendRow + 4}`).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFF0000" },
+    };
+    sheet.getCell(`B${legendRow + 4}`).font = {
+      color: { argb: "FFFFFFFF" },
+      bold: true,
+    };
+
     const filePath = path.join(
       reportsFolder,
       `stock_report_${Date.now()}.xlsx`
     );
     await workbook.xlsx.writeFile(filePath);
-
     return filePath;
   }
 
-  // Обработчики периодов
   bot.action("excel_today", async (ctx) => {
     await ctx.answerCbQuery();
     const today = new Date();
