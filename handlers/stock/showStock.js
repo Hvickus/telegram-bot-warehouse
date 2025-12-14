@@ -22,7 +22,7 @@ module.exports = function registerStockPagination(bot) {
     );
 
     if (!res.rows.length) {
-      return ctx.reply("На складе нет товаров.");
+      return ctx.editMessageText("На складе нет товаров.");
     }
 
     // Формируем текст сообщения
@@ -44,21 +44,29 @@ module.exports = function registerStockPagination(bot) {
       );
     }
 
-    const replyOptions = { parse_mode: "Markdown" };
+    const replyOptions = {};
     if (buttons.length) {
       replyOptions.reply_markup = Markup.inlineKeyboard([buttons]);
     }
 
-    await ctx.reply(text, replyOptions);
+    // Редактируем существующее сообщение или создаем новое
+    if (ctx.updateType === "callback_query") {
+      await ctx.editMessageText(text, {
+        parse_mode: "Markdown",
+        ...replyOptions,
+      });
+    } else {
+      await ctx.reply(text, { parse_mode: "Markdown", ...replyOptions });
+    }
   }
 
-  // Обработчик команды/кнопки для просмотра остатков
+  // Обработчик кнопки "Показать остатки"
   bot.action("show_stock", async (ctx) => {
     await ctx.answerCbQuery();
     await sendStockPage(ctx, 0);
   });
 
-  // Обработка постраничной навигации
+  // Обработка кнопок навигации
   bot.action(/stock_page_(\d+)/, async (ctx) => {
     await ctx.answerCbQuery();
     const offset = parseInt(ctx.match[1], 10);
