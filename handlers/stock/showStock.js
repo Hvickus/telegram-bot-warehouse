@@ -4,12 +4,15 @@ const pool = require("../../db");
 const PAGE_SIZE = 10;
 
 module.exports = function registerStockPagination(bot) {
+  // Функция отправки страницы остатков
   async function sendStockPage(ctx, offset = 0) {
+    // Получаем общее количество товаров на складе
     const countRes = await pool.query("SELECT COUNT(*) FROM stock");
     const total = parseInt(countRes.rows[0].count, 10);
     const totalPages = Math.ceil(total / PAGE_SIZE);
     const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
 
+    // Получаем товары для текущей страницы
     const res = await pool.query(
       `SELECT s.product_id, p.name, s.quantity
        FROM stock s
@@ -20,33 +23,34 @@ module.exports = function registerStockPagination(bot) {
     );
 
     if (!res.rows.length) {
-      if (ctx.updateType === "callback_query") {
-        return ctx.editMessageText("На складе нет товаров.");
-      } else {
-        return ctx.reply("На складе нет товаров.");
-      }
+      const msg = "На складе нет товаров.";
+      if (ctx.updateType === "callback_query") return ctx.editMessageText(msg);
+      return ctx.reply(msg);
     }
 
+    // Формируем текст сообщения
     let text = `📊 *Текущие остатки на складе* (Страница ${currentPage} из ${totalPages}):\n\n`;
     res.rows.forEach((r, i) => {
       text += `${offset + i + 1}. ${r.name} — *${r.quantity}*\n`;
     });
 
-    // Кнопки навигации: "Назад" и "Вперёд" в одном ряду
-    const buttons = [];
+    // Навигационные кнопки
+    const navButtons = [];
     if (currentPage > 1)
-      buttons.push(
+      navButtons.push(
         Markup.button.callback("⬅️ Назад", `stock_page_${offset - PAGE_SIZE}`)
       );
     if (currentPage < totalPages)
-      buttons.push(
+      navButtons.push(
         Markup.button.callback("➡️ Вперёд", `stock_page_${offset + PAGE_SIZE}`)
       );
 
-    const keyboard = buttons.length
-      ? Markup.inlineKeyboard([buttons])
+    // Оборачиваем navButtons в массив массивов для корректного отображения
+    const keyboard = navButtons.length
+      ? Markup.inlineKeyboard([navButtons])
       : undefined;
 
+    // Отправка или редактирование сообщения
     if (ctx.updateType === "callback_query") {
       await ctx.editMessageText(text, {
         parse_mode: "Markdown",
@@ -57,11 +61,13 @@ module.exports = function registerStockPagination(bot) {
     }
   }
 
+  // Кнопка "Показать остатки"
   bot.action("show_stock", async (ctx) => {
     await ctx.answerCbQuery();
     await sendStockPage(ctx, 0);
   });
 
+  // Обработка навигации между страницами
   bot.action(/stock_page_(\d+)/, async (ctx) => {
     await ctx.answerCbQuery();
     const offset = parseInt(ctx.match[1], 10);
