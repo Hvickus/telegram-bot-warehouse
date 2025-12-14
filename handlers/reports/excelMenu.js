@@ -114,10 +114,12 @@ module.exports = function (bot) {
 
     await ctx.replyWithDocument(
       { source: report.path, filename: report.filename },
-      Markup.inlineKeyboard([
-        [Markup.button.callback("📈 Сформировать ещё отчёт", "excel_report")],
-        [Markup.button.callback("🔙 Главное меню", "back_main")],
-      ])
+      {
+        reply_markup: Markup.inlineKeyboard([
+          [Markup.button.callback("📈 Сформировать ещё отчёт", "excel_report")],
+          [Markup.button.callback("🔙 Главное меню", "back_main")],
+        ]),
+      }
     );
   });
 };
