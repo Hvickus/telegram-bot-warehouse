@@ -3,7 +3,7 @@ const { Markup } = require("telegraf");
 
 module.exports = function (bot) {
   /**
-   * Просмотр информации о товаре по кнопке или команде
+   * Просмотр информации о товаре по кнопке
    * Используется callback вида: product_view_<id>
    */
   bot.action(/product_view_(\d+)/, async (ctx) => {
@@ -18,8 +18,7 @@ module.exports = function (bot) {
           p.name, 
           c.name AS category, 
           p.price, 
-          COALESCE(s.quantity, 0) AS current_stock,
-          p.description
+          COALESCE(s.quantity, 0) AS current_stock
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN stock s ON s.product_id = p.id
@@ -41,8 +40,6 @@ module.exports = function (bot) {
 Категория: ${product.category || "-"}
 Цена: ${product.price ?? "-"}
 Текущее количество на складе: *${product.current_stock}*
-
-Описание: ${product.description || "-"}
       `;
 
       // Кнопки управления товаром
