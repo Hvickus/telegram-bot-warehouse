@@ -7,7 +7,7 @@ const REPORTS_DIR = path.join(__dirname, "../../reports");
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
 /**
- * Генерация Excel отчёта через функцию fn_stock_report
+ * Генерация Excel отчёта по fn_stock_report
  */
 async function generateExcelReport(fromDate, toDate) {
   if (!(fromDate instanceof Date) || !(toDate instanceof Date)) {
@@ -48,8 +48,8 @@ async function generateExcelReport(fromDate, toDate) {
     };
   });
 
-  // Получаем данные из fn_stock_report
-  const res = await pool.query(`SELECT * FROM fn_stock_report($1, $2)`, [
+  // Получаем данные через функцию fn_stock_report
+  const res = await pool.query("SELECT * FROM fn_stock_report($1, $2)", [
     fromDate,
     toDate,
   ]);
