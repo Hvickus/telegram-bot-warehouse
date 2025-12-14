@@ -6,12 +6,6 @@ const fs = require("fs");
 const REPORTS_DIR = path.join(__dirname, "../../reports");
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
-/**
- * Генерация Excel отчета по складу
- * @param {Date} fromDate
- * @param {Date} toDate
- * @returns {Promise<string>} путь к файлу
- */
 async function generateExcelReport(fromDate, toDate) {
   if (!(fromDate instanceof Date) || !(toDate instanceof Date)) {
     throw new Error(
@@ -47,7 +41,6 @@ async function generateExcelReport(fromDate, toDate) {
   const fromStr = fromDate.toISOString().slice(0, 10);
   const toStr = toDate.toISOString().slice(0, 10);
 
-  // Данные по товарам и движениям
   const res = await pool.query(
     `
     SELECT p.id, p.name, c.name AS category,
@@ -66,41 +59,40 @@ async function generateExcelReport(fromDate, toDate) {
     [fromStr, toStr]
   );
 
-  // Добавляем строки с окраской
   res.rows.forEach((r, idx) => {
     const row = sheet.addRow(r);
-
-    // Выравнивание
     row.alignment = { vertical: "middle", horizontal: "center" };
 
-    // Зебра-стиль для четных строк
-    if (idx % 2 === 0) {
-      row.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFEAF1FB" },
-      };
-    }
-
-    // Начальные и конечные остатки: цвет
+    // Конечный остаток: перекрашивание поверх зебры
     if (r.end_qty === 0) {
       row.getCell("end_qty").fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFD9D9D9" },
-      }; // серый
+      };
       row.getCell("end_qty").font = { bold: true };
     } else if (r.end_qty < 50) {
       row.getCell("end_qty").fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFFF0000" },
-      }; // красный
+      };
       row.getCell("end_qty").font = { bold: true, color: { argb: "FFFFFFFF" } };
+    } else {
+      // Зебра только на строки без окрашивания конечного остатка
+      if (idx % 2 === 0) {
+        row.eachCell((cell) => {
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFEAF1FB" },
+          };
+        });
+      }
     }
   });
 
-  // Добавляем легенду
+  // Легенда с окраской
   const legendStartRow = sheet.lastRow.number + 2;
   const legend = [
     ["", "Легенда:"],
