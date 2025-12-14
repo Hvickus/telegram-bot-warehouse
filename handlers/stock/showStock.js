@@ -4,12 +4,13 @@ const pool = require("../../db");
 const PAGE_SIZE = 10;
 
 module.exports = function registerStockPagination(bot) {
-  async function sendStockPage(ctx, offset = 0) {
+  async function sendStockPage(ctx, page = 1) {
+    const offset = (page - 1) * PAGE_SIZE;
+
     // Получаем общее количество товаров
     const countRes = await pool.query("SELECT COUNT(*) FROM stock");
     const total = parseInt(countRes.rows[0].count, 10);
     const totalPages = Math.ceil(total / PAGE_SIZE);
-    const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
 
     // Получаем товары для текущей страницы
     const res = await pool.query(
@@ -26,29 +27,29 @@ module.exports = function registerStockPagination(bot) {
     }
 
     // Формируем текст сообщения
-    let text = `📊 *Текущие остатки на складе* (Страница ${currentPage} из ${totalPages}):\n\n`;
+    let text = `📊 *Текущие остатки на складе* (Страница ${page} из ${totalPages}):\n\n`;
     res.rows.forEach((r, i) => {
       text += `${offset + i + 1}. ${r.name} — *${r.quantity}*\n`;
     });
 
     // Формируем кнопки навигации
+    const buttons = [];
     const navButtons = [];
     if (page > 1)
       navButtons.push(
-        Markup.button.callback("⬅️ Назад", `products_page_${page - 1}`)
+        Markup.button.callback("⬅️ Назад", `stock_page_${page - 1}`)
       );
     if (page < totalPages)
       navButtons.push(
-        Markup.button.callback("➡️ Вперед", `products_page_${page + 1}`)
+        Markup.button.callback("➡️ Вперед", `stock_page_${page + 1}`)
       );
+
     if (navButtons.length > 0) buttons.push(navButtons);
 
-    // Добавляем кнопку "Назад в меню" внизу
+    // Кнопка "Назад в меню"
     buttons.push([Markup.button.callback("🔙 Главное меню", "back_main")]);
 
-    const keyboard = buttons.length
-      ? Markup.inlineKeyboard(buttons.map((btn) => [btn])) // каждая кнопка в отдельной строке
-      : undefined;
+    const keyboard = Markup.inlineKeyboard(buttons);
 
     // Редактируем сообщение, если это callback_query, иначе отправляем новое
     if (ctx.updateType === "callback_query") {
@@ -64,13 +65,13 @@ module.exports = function registerStockPagination(bot) {
   // Кнопка "Показать остатки"
   bot.action("show_stock", async (ctx) => {
     await ctx.answerCbQuery();
-    await sendStockPage(ctx, 0);
+    await sendStockPage(ctx, 1);
   });
 
   // Навигация по страницам
   bot.action(/stock_page_(\d+)/, async (ctx) => {
     await ctx.answerCbQuery();
-    const offset = parseInt(ctx.match[1], 10);
-    await sendStockPage(ctx, offset);
+    const page = parseInt(ctx.match[1], 10);
+    await sendStockPage(ctx, page);
   });
 };
