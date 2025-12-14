@@ -25,17 +25,17 @@ async function generateExcelReport(fromDate, toDate) {
   sheet.mergeCells("A1:G1");
   sheet.getCell("A1").alignment = { horizontal: "center" };
   sheet.getCell("A1").font = { bold: true };
-  sheet.addRow([]);
+  sheet.addRow([]); // пустая строка
 
-  // Заголовки столбцов
+  // Заголовки
   sheet.columns = [
     { header: "ID", key: "id", width: 10 },
     { header: "Название", key: "name", width: 30 },
     { header: "Категория", key: "category", width: 20 },
-    { header: "Остаток на начало", key: "start_qty", width: 15 },
+    { header: "Начальный остаток", key: "start_qty", width: 15 },
     { header: "Приход", key: "income", width: 12 },
     { header: "Списание", key: "outcome", width: 12 },
-    { header: "Остаток на конец", key: "end_qty", width: 15 },
+    { header: "Конечный остаток", key: "end_qty", width: 15 },
   ];
 
   sheet.getRow(3).eachCell((cell) => {
@@ -67,42 +67,44 @@ async function generateExcelReport(fromDate, toDate) {
     [fromDate, toDate]
   );
 
-  // Добавляем строки
+  const dataStartRow = 4; // начиная с этой строки данные
   res.rows.forEach((r, index) => {
     const row = sheet.addRow(r);
 
-    // Зебра
+    // Зебра только для строк с данными
     if ((index + 1) % 2 === 0) {
-      row.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFEAF1FB" },
-      };
+      row.eachCell((cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFEAF1FB" },
+        };
+      });
     }
 
     // Центрирование всех ячеек
     row.eachCell((cell) => {
       cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.font = cell.font || { color: { argb: "FF000000" } }; // чтобы цвет заливки работал корректно
+      if (typeof cell.value === "number") cell.numFmt = "0";
     });
 
     // Цвет конечного остатка
     const endCell = row.getCell("end_qty");
-    if (r.end_qty === 0) {
+    if (endCell.value === 0) {
       endCell.fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFFF0000" },
       }; // красный
       endCell.font = { color: { argb: "FFFFFFFF" }, bold: true };
-    } else if (r.end_qty > 0 && r.end_qty < 50) {
+    } else if (endCell.value > 0 && endCell.value < 50) {
       endCell.fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFFFA500" },
       }; // оранжевый
       endCell.font = { color: { argb: "FF000000" }, bold: true };
-    } else if (r.end_qty < 0) {
+    } else if (endCell.value < 0) {
       endCell.fill = {
         type: "pattern",
         pattern: "solid",
@@ -114,10 +116,10 @@ async function generateExcelReport(fromDate, toDate) {
 
   // Легенда цветов
   sheet.addRow([]);
-  sheet.addRow(["Легенда цветов:"]);
-  sheet.addRow(["Красный", "– 0 остатка"]);
-  sheet.addRow(["Оранжевый", "– менее 50"]);
-  sheet.addRow(["Серый", "– отрицательный остаток"]);
+  sheet.addRow(["Легенда:"]);
+  sheet.addRow(["Красный – 0 остатка"]);
+  sheet.addRow(["Оранжевый – менее 50"]);
+  sheet.addRow(["Серый – отрицательный остаток"]);
   const legendStartRow = sheet.rowCount - 3;
   for (let i = legendStartRow; i <= sheet.rowCount; i++) {
     sheet.getRow(i).eachCell((cell) => {
@@ -137,7 +139,6 @@ async function generateExcelReport(fromDate, toDate) {
 
   const filePath = path.join(REPORTS_DIR, `stock_report_${Date.now()}.xlsx`);
   await workbook.xlsx.writeFile(filePath);
-
   return filePath;
 }
 
