@@ -1,32 +1,66 @@
-const { Markup } = require("telegraf");
 const pool = require("../../db");
-const replyOrEdit = require("../../utils/replyOrEdit");
-const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
+const { Markup } = require("telegraf");
 
 module.exports = function (bot) {
+  /**
+   * Просмотр информации о товаре по кнопке или команде
+   * Используется callback вида: product_view_<id>
+   */
   bot.action(/product_view_(\d+)/, async (ctx) => {
-    await safeAnswerCbQuery(ctx);
+    const productId = ctx.match[1];
 
-    const productId = parseInt(ctx.match[1], 10);
+    try {
+      // Получаем информацию о товаре и текущем остатке
+      const res = await pool.query(
+        `
+        SELECT 
+          p.id, 
+          p.name, 
+          c.name AS category, 
+          p.price, 
+          COALESCE(s.quantity, 0) AS current_stock,
+          p.description
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN stock s ON s.product_id = p.id
+        WHERE p.id = $1
+        `,
+        [productId]
+      );
 
-    const { rows } = await pool.query(
-      `SELECT p.id, p.name, c.name AS category
-       FROM products p
-       LEFT JOIN categories c ON p.category_id = c.id
-       WHERE p.id = $1`,
-      [productId]
-    );
+      if (!res.rows.length) {
+        return ctx.reply("❌ Товар не найден");
+      }
 
-    if (rows.length === 0) return ctx.reply("❌ Товар не найден.");
+      const product = res.rows[0];
 
-    const product = rows[0];
-    const text = `📦 *${product.name}*\nКатегория: ${product.category || "-"}`;
+      // Формируем сообщение
+      const messageText = `
+📦 *${product.name}*
 
-    await replyOrEdit(ctx, text, {
-      parse_mode: "Markdown",
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback("⬅️ Назад к списку", "products_list")],
-      ]),
-    });
+Категория: ${product.category || "-"}
+Цена: ${product.price ?? "-"}
+Текущее количество на складе: *${product.current_stock}*
+
+Описание: ${product.description || "-"}
+      `;
+
+      // Кнопки управления товаром
+      const buttons = Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            "✏️ Редактировать",
+            `product_edit_${product.id}`
+          ),
+          Markup.button.callback("🗑 Удалить", `product_delete_${product.id}`),
+        ],
+        [Markup.button.callback("🔙 Назад к списку", "products_list")],
+      ]);
+
+      await ctx.reply(messageText, { parse_mode: "Markdown", ...buttons });
+    } catch (err) {
+      console.error("Ошибка при получении товара:", err);
+      await ctx.reply("❌ Произошла ошибка при загрузке информации о товаре");
+    }
   });
 };
