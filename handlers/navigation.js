@@ -7,7 +7,7 @@ const outcomeMenu = require("./outcome/outcomeMenu");
 const reportsMenu = require("./reports/menu");
 const safeAnswerCbQuery = require("../utils/safeAnswerCbQuery");
 const safeEditMessage = require("../utils/safeEditMessage");
-const rolesMenu = require("../menus/rolesMenu");
+const rolesMenu = require("../../menus/rolesMenu");
 
 module.exports = function (bot) {
   // Главное меню
