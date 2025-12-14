@@ -1,42 +1,65 @@
 const { Markup } = require("telegraf");
 const pool = require("../../db");
+const replyOrEdit = require("../../utils/replyOrEdit");
+const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
 
-// Показываем товары постранично
-async function showProducts(ctx, page = 1) {
-  const limit = 10;
-  const offset = (page - 1) * limit;
+const PAGE_SIZE = 10;
 
-  const res = await pool.query(
-    "SELECT id, name, category_id FROM products ORDER BY id LIMIT $1 OFFSET $2",
-    [limit, offset]
-  );
-
-  if (res.rows.length === 0) {
-    return ctx.reply("📦 Товары не найдены.");
-  }
-
-  const buttons = res.rows.map((p) => [
-    Markup.button.callback(`${p.id}. ${p.name}`, `view_product_${p.id}`),
+/**
+ * Формирует кнопки для текущей страницы
+ */
+function buildProductKeyboard(products, page, totalPages) {
+  const buttons = products.map((p) => [
+    Markup.button.callback(p.name, `product_${p.id}`),
   ]);
 
-  // Кнопки навигации
-  buttons.push([
-    Markup.button.callback("⬅️ Назад", `products_prev_${page - 1}`),
-    Markup.button.callback("➡️ Далее", `products_next_${page + 1}`),
-  ]);
+  const navigation = [];
+  if (page > 1)
+    navigation.push(
+      Markup.button.callback("⬅️ Назад", `products_page_${page - 1}`)
+    );
+  if (page < totalPages)
+    navigation.push(
+      Markup.button.callback("➡️ Вперед", `products_page_${page + 1}`)
+    );
+  if (navigation.length) buttons.push(navigation);
 
-  await ctx.reply("📦 Список товаров:", Markup.inlineKeyboard(buttons));
+  buttons.push([Markup.button.callback("🔙 Назад", "back_main")]);
+  return Markup.inlineKeyboard(buttons);
 }
 
-// Обработчик пагинации
-function registerProductPagination(bot) {
-  bot.action(/products_(prev|next)_(\d+)/, async (ctx) => {
-    const page = parseInt(ctx.match[2]);
-    if (page < 1) return ctx.answerCbQuery("Это первая страница.");
-    ctx.session.productsPage = page;
-    await showProducts(ctx, page);
-    await ctx.answerCbQuery();
+module.exports = function (bot) {
+  // Начало просмотра списка товаров
+  bot.action("menu_products", async (ctx) => {
+    await safeAnswerCbQuery(ctx);
+
+    const res = await pool.query("SELECT id, name FROM products ORDER BY id");
+    const products = res.rows;
+    const totalPages = Math.ceil(products.length / PAGE_SIZE);
+    const pageProducts = products.slice(0, PAGE_SIZE);
+
+    await replyOrEdit(
+      ctx,
+      "📦 Список товаров:",
+      buildProductKeyboard(pageProducts, 1, totalPages)
+    );
   });
-}
 
-module.exports = { showProducts, registerProductPagination };
+  // Навигация по страницам
+  bot.action(/products_page_(\d+)/, async (ctx) => {
+    await safeAnswerCbQuery(ctx);
+
+    const page = parseInt(ctx.match[1]);
+    const res = await pool.query("SELECT id, name FROM products ORDER BY id");
+    const products = res.rows;
+    const totalPages = Math.ceil(products.length / PAGE_SIZE);
+    const start = (page - 1) * PAGE_SIZE;
+    const pageProducts = products.slice(start, start + PAGE_SIZE);
+
+    await replyOrEdit(
+      ctx,
+      `📦 Список товаров (страница ${page}/${totalPages}):`,
+      buildProductKeyboard(pageProducts, page, totalPages)
+    );
+  });
+};
