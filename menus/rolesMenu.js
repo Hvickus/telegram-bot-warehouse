@@ -2,34 +2,30 @@ const { Markup } = require("telegraf");
 const pool = require("../db");
 
 module.exports = async function rolesMenu(ctx) {
-  // Получаем роль пользователя
-  const resRole = await pool.query(
-    "SELECT role FROM bot_users WHERE telegram_id=$1",
-    [ctx.from.id]
-  );
-  const role = resRole.rows[0]?.role || "user";
+  const telegramId = ctx.from.id;
 
-  if (role !== "admin") {
-    return Markup.inlineKeyboard([
-      [Markup.button.callback("🔙 Главное меню", "back_main")],
-    ]);
-  }
-
-  // Получаем список админов
-  const resAdmins = await pool.query(
-    "SELECT telegram_id, username FROM bot_users WHERE role='admin' ORDER BY id"
+  // Получаем всех админов
+  const res = await pool.query(
+    "SELECT telegram_id, username FROM bot_users WHERE role='admin' ORDER BY telegram_id"
   );
 
-  const adminButtons = resAdmins.rows.map((u) => {
-    const label = u.username ? `@${u.username}` : u.telegram_id;
-    return [Markup.button.callback(label, `admin_${u.telegram_id}`)];
+  const buttons = res.rows.map((u) => {
+    const canDelete = u.telegram_id !== telegramId; // нельзя удалить себя
+    return [
+      Markup.button.callback(
+        `${u.username || u.telegram_id} ${canDelete ? "❌" : ""}`,
+        canDelete ? `del_admin_${u.telegram_id}` : "noop"
+      ),
+    ];
   });
 
-  // Добавляем кнопки для управления
-  adminButtons.push([
+  // Кнопка добавления нового администратора
+  buttons.push([
     Markup.button.callback("➕ Добавить администратора", "add_admin"),
   ]);
-  adminButtons.push([Markup.button.callback("🔙 Главное меню", "back_main")]);
 
-  return Markup.inlineKeyboard(adminButtons);
+  // Кнопка назад в главное меню
+  buttons.push([Markup.button.callback("🔙 Главное меню", "back_main")]);
+
+  return Markup.inlineKeyboard(buttons);
 };

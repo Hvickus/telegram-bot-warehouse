@@ -1,4 +1,3 @@
-// mainMenu.js
 const { Markup } = require("telegraf");
 const pool = require("../db");
 

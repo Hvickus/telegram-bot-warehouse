@@ -3,8 +3,6 @@ const safeEditMessage = require("../../utils/safeEditMessage");
 const pool = require("../../db");
 const rolesMenu = require("../../menus/rolesMenu");
 
-const MAIN_ADMIN_ID = 1111944400; // твой Telegram ID, нельзя удалить
-
 module.exports = function (bot) {
   // Открыть меню ролей
   bot.action("roles_menu", async (ctx) => {
@@ -15,69 +13,84 @@ module.exports = function (bot) {
     });
   });
 
-  // Кнопка "Добавить администратора"
+  // Добавление администратора
   bot.action("add_admin", async (ctx) => {
     await safeAnswerCbQuery(ctx);
-
     ctx.session = ctx.session || {};
     ctx.session.flow = "add_admin";
 
-    await safeEditMessage(ctx, "Введите Telegram ID нового администратора:");
+    await safeEditMessage(
+      ctx,
+      "Введите Telegram ID пользователя, чтобы дать права администратора:"
+    );
   });
 
-  // Ввод Telegram ID нового администратора
-  bot.on("text", async (ctx, next) => {
-    const s = ctx.session;
-    if (!s || s.flow !== "add_admin") return next();
-
-    const newId = Number(ctx.message.text.trim());
-    if (!Number.isInteger(newId))
-      return ctx.reply("Введите корректный Telegram ID.");
-
-    try {
-      await pool.query(
-        `INSERT INTO bot_users (telegram_id, role)
-         VALUES ($1, 'admin')
-         ON CONFLICT (telegram_id) DO UPDATE SET role='admin'`,
-        [newId]
-      );
-
-      delete ctx.session.flow;
-
-      await safeEditMessage(
-        ctx,
-        `✅ Пользователь с Telegram ID ${newId} назначен администратором.`,
-        { reply_markup: await rolesMenu(ctx) }
-      );
-    } catch (err) {
-      console.error("Ошибка добавления администратора:", err);
-      await ctx.reply("Ошибка при добавлении администратора.");
-    }
-  });
-
-  // Кнопка удаления админа
-  bot.action(/admin_(\d+)/, async (ctx) => {
+  // Удаление администратора
+  bot.action(/del_admin_(.+)/, async (ctx) => {
     await safeAnswerCbQuery(ctx);
-    const userId = Number(ctx.match[1]);
 
-    if (userId === MAIN_ADMIN_ID) {
-      return ctx.reply("❌ Нельзя удалить главного администратора.");
-    }
+    const telegramId = Number(ctx.match[1]);
 
     try {
       await pool.query(
         "UPDATE bot_users SET role='user' WHERE telegram_id=$1",
-        [userId]
+        [telegramId]
       );
 
-      await safeEditMessage(
-        ctx,
-        `🗑 Администратор с Telegram ID ${userId} удалён.`,
-        { reply_markup: await rolesMenu(ctx) }
-      );
+      const keyboard = await rolesMenu(ctx);
+      await safeEditMessage(ctx, "✅ Администратор удалён", {
+        reply_markup: keyboard,
+      });
     } catch (err) {
       console.error("Ошибка удаления администратора:", err);
-      await ctx.reply("Ошибка при удалении администратора.");
+      await safeEditMessage(ctx, "❌ Ошибка при удалении администратора.");
     }
+  });
+
+  // Обработка ввода Telegram ID для добавления администратора
+  bot.on("text", async (ctx, next) => {
+    const s = ctx.session;
+    if (!s || s.flow !== "add_admin") return next();
+
+    const telegramId = Number(ctx.message.text.trim());
+    if (!Number.isInteger(telegramId)) {
+      return ctx.reply("❌ Некорректный Telegram ID. Попробуйте снова:");
+    }
+
+    try {
+      // Проверяем, есть ли пользователь в базе
+      const res = await pool.query(
+        "SELECT * FROM bot_users WHERE telegram_id=$1",
+        [telegramId]
+      );
+      if (res.rows.length === 0) {
+        return ctx.reply(
+          "❌ Пользователь не найден в базе. Он должен сначала начать бота."
+        );
+      }
+
+      // Делаем администратора
+      await pool.query(
+        "UPDATE bot_users SET role='admin' WHERE telegram_id=$1",
+        [telegramId]
+      );
+
+      ctx.session.flow = null;
+
+      const keyboard = await rolesMenu(ctx);
+      await safeEditMessage(
+        ctx,
+        `✅ Пользователь ${telegramId} теперь администратор`,
+        { reply_markup: keyboard }
+      );
+    } catch (err) {
+      console.error("Ошибка добавления администратора:", err);
+      await ctx.reply("❌ Ошибка при добавлении администратора.");
+    }
+  });
+
+  // noop для кнопок, которые нельзя нажимать
+  bot.action("noop", async (ctx) => {
+    await safeAnswerCbQuery(ctx);
   });
 };
