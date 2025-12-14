@@ -127,13 +127,19 @@ module.exports = function (bot) {
 
     // Зебра-стиль
     sheet.eachRow((row, rowNumber) => {
-      if (rowNumber > 1 && rowNumber % 2 === 0) {
-        row.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FFEAF1FB" },
-        };
-      }
+      if (rowNumber === 1) return; // заголовок
+      row.eachCell((cell) => {
+        if (!cell.fill) {
+          // если нет пользовательского фона
+          if (rowNumber % 2 === 0) {
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: "FFEAF1FB" },
+            };
+          }
+        }
+      });
     });
 
     // Легенда цветов
