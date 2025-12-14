@@ -38,7 +38,6 @@ async function generateExcelReport(fromDate, toDate) {
     { header: "Остаток на конец", key: "end_qty", width: 15 },
   ];
 
-  // Стили заголовка
   sheet.getRow(3).eachCell((cell) => {
     cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
     cell.fill = {
@@ -81,31 +80,36 @@ async function generateExcelReport(fromDate, toDate) {
       };
     }
 
-    // Окраска конечного остатка
-    const end = r.end_qty;
-    if (end === 0)
-      row.getCell("end_qty").fill = {
+    // Центрирование всех ячеек
+    row.eachCell((cell) => {
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.font = cell.font || { color: { argb: "FF000000" } }; // чтобы цвет заливки работал корректно
+    });
+
+    // Цвет конечного остатка
+    const endCell = row.getCell("end_qty");
+    if (r.end_qty === 0) {
+      endCell.fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFFF0000" },
-      };
-    else if (end > 0 && end < 50)
-      row.getCell("end_qty").fill = {
+      }; // красный
+      endCell.font = { color: { argb: "FFFFFFFF" }, bold: true };
+    } else if (r.end_qty > 0 && r.end_qty < 50) {
+      endCell.fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFFFA500" },
-      };
-    else if (end < 0)
-      row.getCell("end_qty").fill = {
+      }; // оранжевый
+      endCell.font = { color: { argb: "FF000000" }, bold: true };
+    } else if (r.end_qty < 0) {
+      endCell.fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFB0B0B0" },
-      };
-
-    // Центрирование
-    row.eachCell((cell) => {
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-    });
+      }; // серый
+      endCell.font = { color: { argb: "FF000000" }, bold: true };
+    }
   });
 
   // Легенда цветов
@@ -121,7 +125,7 @@ async function generateExcelReport(fromDate, toDate) {
     });
   }
 
-  // Автоширина
+  // Автоширина колонок
   sheet.columns.forEach((col) => {
     let maxLength = col.header.length;
     col.eachCell({ includeEmpty: true }, (cell) => {
