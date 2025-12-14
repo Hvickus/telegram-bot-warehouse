@@ -8,15 +8,15 @@ const safeAnswerCbQuery = require("../utils/safeAnswerCbQuery");
 const safeEditMessage = require("../utils/safeEditMessage");
 
 module.exports = function (bot) {
-  // Главное меню
   bot.action("back_main", async (ctx) => {
     await safeAnswerCbQuery(ctx);
+    const keyboard = await mainMenu(ctx);
+
     await safeEditMessage(ctx, "Главное меню:", {
-      reply_markup: await mainMenu(ctx),
+      reply_markup: keyboard.reply_markup,
     });
   });
 
-  // Товары
   bot.action("menu_products", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📦 Меню товаров:", {
@@ -24,7 +24,6 @@ module.exports = function (bot) {
     });
   });
 
-  // Остатки
   bot.action("menu_stock", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📦 Меню остатков:", {
@@ -32,7 +31,6 @@ module.exports = function (bot) {
     });
   });
 
-  // Приход
   bot.action("menu_income", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📥 Меню прихода:", {
@@ -40,7 +38,6 @@ module.exports = function (bot) {
     });
   });
 
-  // Списание
   bot.action("menu_outcome", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📤 Меню списания:", {
@@ -48,7 +45,6 @@ module.exports = function (bot) {
     });
   });
 
-  // Отчёты
   bot.action("menu_reports", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     await safeEditMessage(ctx, "📊 Меню отчётов:", {

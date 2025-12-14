@@ -31,12 +31,11 @@ bot.start(async (ctx) => {
     [telegramId, username]
   );
 
-  await pool.query("SELECT log_user_action($1, $2)", [telegramId, "start_bot"]);
-
   const mainMenu = require("./menus/mainMenu");
+  const keyboard = await mainMenu(ctx);
 
   await ctx.reply("Привет! Добро пожаловать.", {
-    reply_markup: await mainMenu(ctx),
+    reply_markup: keyboard.reply_markup,
   });
 });
 
