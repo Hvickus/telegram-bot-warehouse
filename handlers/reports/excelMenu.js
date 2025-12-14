@@ -4,7 +4,7 @@ const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
 const { generateExcelReport } = require("./excelReport");
 
 module.exports = function (bot) {
-  // Главное меню Excel-отчёта
+  // Меню выбора периода Excel-отчёта
   bot.action("excel_report", async (ctx) => {
     await safeAnswerCbQuery(ctx);
 
@@ -18,6 +18,33 @@ module.exports = function (bot) {
       ]),
     });
   });
+
+  // Универсальная функция отправки отчёта с кнопками
+  async function sendReport(ctx, from, to) {
+    await replyOrEdit(ctx, "⏳ Формирование отчёта...");
+
+    try {
+      const filePath = await generateExcelReport(from, to);
+
+      await ctx.replyWithDocument(
+        { source: filePath, filename: filePath.split("/").pop() },
+        {
+          reply_markup: Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                "📈 Сформировать ещё отчёт",
+                "excel_report"
+              ),
+            ],
+            [Markup.button.callback("🔙 Главное меню", "back_main")],
+          ]).reply_markup,
+        }
+      );
+    } catch (err) {
+      console.error("Ошибка генерации Excel отчёта:", err);
+      await ctx.reply("❗ Ошибка при генерации отчёта.");
+    }
+  }
 
   // Отчёт за сегодня
   bot.action("excel_today", async (ctx) => {
@@ -38,17 +65,7 @@ module.exports = function (bot) {
       59
     );
 
-    await replyOrEdit(ctx, "⏳ Формирование отчёта за сегодня...");
-
-    const report = await generateExcelReport(from, to);
-
-    await ctx.replyWithDocument(
-      { source: report.path, filename: report.filename },
-      Markup.inlineKeyboard([
-        [Markup.button.callback("📈 Сформировать ещё отчёт", "excel_report")],
-        [Markup.button.callback("🔙 Главное меню", "back_main")],
-      ])
-    );
+    await sendReport(ctx, from, to);
   });
 
   // Отчёт за текущий месяц
@@ -59,17 +76,7 @@ module.exports = function (bot) {
     const from = new Date(now.getFullYear(), now.getMonth(), 1);
     const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-    await replyOrEdit(ctx, "⏳ Формирование отчёта за текущий месяц...");
-
-    const report = await generateExcelReport(from, to);
-
-    await ctx.replyWithDocument(
-      { source: report.path, filename: report.filename },
-      Markup.inlineKeyboard([
-        [Markup.button.callback("📈 Сформировать ещё отчёт", "excel_report")],
-        [Markup.button.callback("🔙 Главное меню", "back_main")],
-      ])
-    );
+    await sendReport(ctx, from, to);
   });
 
   // Произвольный период
@@ -108,18 +115,6 @@ module.exports = function (bot) {
 
     delete s.flow;
 
-    await replyOrEdit(ctx, "⏳ Формирование отчёта за выбранный период...");
-
-    const report = await generateExcelReport(from, to);
-
-    await ctx.replyWithDocument(
-      { source: report.path, filename: report.filename },
-      {
-        reply_markup: Markup.inlineKeyboard([
-          [Markup.button.callback("📈 Сформировать ещё отчёт", "excel_report")],
-          [Markup.button.callback("🔙 Главное меню", "back_main")],
-        ]),
-      }
-    );
+    await sendReport(ctx, from, to);
   });
 };
