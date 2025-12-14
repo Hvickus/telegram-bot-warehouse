@@ -8,7 +8,7 @@ const path = require("path");
 
 // Папка для временных файлов отчёта
 const REPORTS_DIR = path.join(__dirname, "../../reports");
-if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR);
+if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
 async function generateExcelReport(ctx, fromDate, toDate) {
   const workbook = new ExcelJS.Workbook();
@@ -67,16 +67,15 @@ async function generateExcelReport(ctx, fromDate, toDate) {
 module.exports = function (bot) {
   bot.action("excel_report", async (ctx) => {
     await safeAnswerCbQuery(ctx);
-    await replyOrEdit(
-      ctx,
-      "Выберите период для Excel отчёта:",
-      Markup.inlineKeyboard([
+
+    await replyOrEdit(ctx, "Выберите период для Excel отчёта:", {
+      reply_markup: Markup.inlineKeyboard([
         [Markup.button.callback("📅 Сегодня", "excel_today")],
         [Markup.button.callback("📆 Этот месяц", "excel_month")],
         [Markup.button.callback("🗓 Выбрать период", "excel_custom")],
         [Markup.button.callback("🔙 Назад", "back_main")],
-      ])
-    );
+      ]),
+    });
   });
 
   bot.action("excel_today", async (ctx) => {
@@ -95,7 +94,8 @@ module.exports = function (bot) {
       59,
       59
     );
-    await ctx.reply("Генерация отчёта за сегодня...");
+
+    await replyOrEdit(ctx, "Генерация отчёта за сегодня...");
     await generateExcelReport(ctx, from, to);
   });
 
@@ -104,7 +104,8 @@ module.exports = function (bot) {
     const now = new Date();
     const from = new Date(now.getFullYear(), now.getMonth(), 1);
     const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-    await ctx.reply("Генерация отчёта за текущий месяц...");
+
+    await replyOrEdit(ctx, "Генерация отчёта за текущий месяц...");
     await generateExcelReport(ctx, from, to);
   });
 
@@ -112,7 +113,8 @@ module.exports = function (bot) {
     await safeAnswerCbQuery(ctx);
     ctx.session = ctx.session || {};
     ctx.session.flow = "excel_custom";
-    await ctx.reply(
+    await replyOrEdit(
+      ctx,
       "Введите начальную и конечную дату в формате YYYY-MM-DD - YYYY-MM-DD"
     );
   });
@@ -124,14 +126,14 @@ module.exports = function (bot) {
     const match = ctx.message.text.match(
       /^(\d{4}-\d{2}-\d{2})\s*-\s*(\d{4}-\d{2}-\d{2})$/
     );
-    if (!match) return ctx.reply("Неверный формат. Попробуйте снова.");
+    if (!match) return replyOrEdit(ctx, "Неверный формат. Попробуйте снова.");
 
     const from = new Date(match[1]);
     const to = new Date(match[2]);
     to.setHours(23, 59, 59);
 
     s.flow = null;
-    await ctx.reply("Генерация отчёта за указанный период...");
+    await replyOrEdit(ctx, "Генерация отчёта за указанный период...");
     await generateExcelReport(ctx, from, to);
   });
 };
