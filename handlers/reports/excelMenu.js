@@ -43,8 +43,8 @@ module.exports = function (bot) {
     );
 
     await replyOrEdit(ctx, "⏳ Формирование отчёта за сегодня...");
-    const filePath = await generateExcelReport(from, to);
 
+    const filePath = await generateExcelReport(from, to);
     await ctx.replyWithDocument({ source: filePath });
   });
 
@@ -59,8 +59,8 @@ module.exports = function (bot) {
     const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
     await replyOrEdit(ctx, "⏳ Формирование отчёта за текущий месяц...");
-    const filePath = await generateExcelReport(from, to);
 
+    const filePath = await generateExcelReport(from, to);
     await ctx.replyWithDocument({ source: filePath });
   });
 
@@ -104,9 +104,8 @@ module.exports = function (bot) {
 
     delete s.flow;
 
-    await ctx.reply("⏳ Формирование отчёта за выбранный период...");
+    await replyOrEdit(ctx, "⏳ Формирование отчёта за выбранный период...");
     const filePath = await generateExcelReport(from, to);
-
     await ctx.replyWithDocument({ source: filePath });
   });
 };
