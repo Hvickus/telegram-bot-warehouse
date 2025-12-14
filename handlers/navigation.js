@@ -1,4 +1,3 @@
-// navigation.js
 const mainMenu = require("../menus/mainMenu");
 const productsMenu = require("../menus/productsMenu");
 const stockMenu = require("./stock/stockMenu");
@@ -20,41 +19,31 @@ module.exports = function (bot) {
   // Меню товаров
   bot.action("menu_products", async (ctx) => {
     await safeAnswerCbQuery(ctx);
-    await safeEditMessage(ctx, "📦 Меню товаров:", {
-      reply_markup: productsMenu().reply_markup,
-    });
+    await safeEditMessage(ctx, "📦 Меню товаров:", productsMenu());
   });
 
   // Меню остатков
   bot.action("menu_stock", async (ctx) => {
     await safeAnswerCbQuery(ctx);
-    await safeEditMessage(ctx, "📦 Меню остатков:", {
-      reply_markup: stockMenu().reply_markup,
-    });
+    await safeEditMessage(ctx, "📦 Меню остатков:", stockMenu());
   });
 
   // Меню прихода
   bot.action("menu_income", async (ctx) => {
     await safeAnswerCbQuery(ctx);
-    await safeEditMessage(ctx, "📥 Меню прихода:", {
-      reply_markup: incomeMenu().reply_markup,
-    });
+    await safeEditMessage(ctx, "📥 Меню прихода:", incomeMenu());
   });
 
   // Меню списания
   bot.action("menu_outcome", async (ctx) => {
     await safeAnswerCbQuery(ctx);
-    await safeEditMessage(ctx, "📤 Меню списания:", {
-      reply_markup: outcomeMenu().reply_markup,
-    });
+    await safeEditMessage(ctx, "📤 Меню списания:", outcomeMenu());
   });
 
   // Меню отчётов
   bot.action("menu_reports", async (ctx) => {
     await safeAnswerCbQuery(ctx);
-    await safeEditMessage(ctx, "📊 Меню отчётов:", {
-      reply_markup: reportsMenu().reply_markup,
-    });
+    await safeEditMessage(ctx, "📊 Меню отчётов:", reportsMenu());
   });
 
   // Меню ролей

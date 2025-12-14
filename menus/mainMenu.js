@@ -26,5 +26,5 @@ module.exports = async function mainMenu(ctx) {
     console.error("Ошибка проверки роли пользователя:", err);
   }
 
-  return { reply_markup: Markup.inlineKeyboard(buttons) };
+  return Markup.inlineKeyboard(buttons);
 };

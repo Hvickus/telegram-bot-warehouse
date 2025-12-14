@@ -45,9 +45,7 @@ bot.start(async (ctx) => {
   const mainMenu = require("./menus/mainMenu");
   const keyboard = await mainMenu(ctx);
 
-  await ctx.reply("Привет! Добро пожаловать.", {
-    reply_markup: keyboard.reply_markup,
-  });
+  await ctx.reply("Привет! Добро пожаловать.", keyboard);
 });
 
 // Управление ролями
