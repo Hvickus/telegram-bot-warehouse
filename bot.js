@@ -24,9 +24,12 @@ bot.start(async (ctx) => {
   });
 });
 
-const generateAdvancedStockReport = require("./utils/generateExcelReport");
+const generateAdvancedStockReport = require("./utils/generateExcelReportAdvanced");
+const safeAnswerCbQuery = require("./utils/safeAnswerCbQuery");
 
-bot.command("advreport", async (ctx) => {
+bot.action("generate_excel_report", async (ctx) => {
+  await safeAnswerCbQuery(ctx);
+
   try {
     const filePath = await generateAdvancedStockReport();
     await ctx.replyWithDocument({
@@ -34,8 +37,8 @@ bot.command("advreport", async (ctx) => {
       filename: "advanced_stock_report.xlsx",
     });
   } catch (err) {
-    console.error("Ошибка продвинутого отчёта:", err);
-    ctx.reply("Ошибка при формировании продвинутого Excel отчёта.");
+    console.error("Ошибка генерации Excel отчёта:", err);
+    await ctx.reply("Ошибка при формировании Excel отчёта.");
   }
 });
 

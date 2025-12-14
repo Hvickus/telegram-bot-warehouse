@@ -7,4 +7,5 @@ module.exports = () =>
     [Markup.button.callback("📥 Приход товара", "menu_income")],
     [Markup.button.callback("📤 Списание товара", "menu_outcome")],
     [Markup.button.callback("📊 Отчёты", "menu_reports")],
+    [Markup.button.callback("📈 Excel отчёт", "generate_excel_report")],
   ]);
