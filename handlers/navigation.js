@@ -14,7 +14,7 @@ module.exports = function (bot) {
   bot.action("back_main", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     const keyboard = await mainMenu(ctx);
-    await safeEditMessage(ctx, "Главное меню:", { reply_markup: keyboard });
+    await safeEditMessage(ctx, "Главное меню:", keyboard);
   });
 
   // Меню товаров
@@ -61,8 +61,6 @@ module.exports = function (bot) {
   bot.action("roles_menu", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     const keyboard = await rolesMenu(ctx);
-    await safeEditMessage(ctx, "👥 Управление администраторами:", {
-      reply_markup: keyboard,
-    });
+    await safeEditMessage(ctx, "👥 Управление администраторами:", keyboard);
   });
 };

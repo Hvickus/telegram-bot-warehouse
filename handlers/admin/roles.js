@@ -3,16 +3,14 @@ const safeAnswerCbQuery = require("../../utils/safeAnswerCbQuery");
 const safeEditMessage = require("../../utils/safeEditMessage");
 const rolesMenu = require("../../menus/rolesMenu");
 
-const MAIN_ADMIN_ID = 1111944400; // <-- здесь твой Telegram ID
+const MAIN_ADMIN_ID = 1111944400; // <-- твой Telegram ID
 
 module.exports = function (bot) {
   // Главное меню управления ролями
   bot.action("roles_menu", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     const keyboard = await rolesMenu(ctx);
-    await safeEditMessage(ctx, "👥 Управление администраторами:", {
-      reply_markup: keyboard,
-    });
+    await safeEditMessage(ctx, "👥 Управление администраторами:", keyboard);
   });
 
   // Добавление администратора
@@ -39,7 +37,12 @@ module.exports = function (bot) {
         [telegramId]
       );
       delete ctx.session.flow;
-      await ctx.reply("✅ Пользователь назначен администратором.");
+      const keyboard = await rolesMenu(ctx);
+      await safeEditMessage(
+        ctx,
+        "✅ Пользователь назначен администратором.",
+        keyboard
+      );
     } catch (err) {
       console.error("Ошибка назначения администратора:", err);
       await ctx.reply("Ошибка при назначении администратора.");
@@ -60,10 +63,9 @@ module.exports = function (bot) {
         `UPDATE bot_users SET role = 'user' WHERE telegram_id = $1`,
         [telegramId]
       );
+
       const keyboard = await rolesMenu(ctx);
-      await safeEditMessage(ctx, "✅ Администратор удалён.", {
-        reply_markup: keyboard,
-      });
+      await safeEditMessage(ctx, "✅ Администратор удалён.", keyboard);
     } catch (err) {
       console.error("Ошибка удаления администратора:", err);
       await ctx.reply("Ошибка при удалении администратора.");
