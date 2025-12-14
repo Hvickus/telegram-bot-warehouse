@@ -7,7 +7,7 @@ const REPORTS_DIR = path.join(__dirname, "../../reports");
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
 /**
- * Генерация Excel отчёта через представление vw_stock_report
+ * Генерация Excel отчёта через функцию fn_stock_report
  */
 async function generateExcelReport(fromDate, toDate) {
   if (!(fromDate instanceof Date) || !(toDate instanceof Date)) {
@@ -21,7 +21,7 @@ async function generateExcelReport(fromDate, toDate) {
 
   // Заголовки
   const columns = [
-    { header: "ID", key: "product_id", width: 10 },
+    { header: "ID", key: "id", width: 10 },
     { header: "Название", key: "name", width: 30 },
     { header: "Категория", key: "category", width: 20 },
     { header: "Остаток на начало", key: "start_qty", width: 15 },
@@ -48,8 +48,8 @@ async function generateExcelReport(fromDate, toDate) {
     };
   });
 
-  // Получаем данные из представления vw_stock_report
-  const res = await pool.query("SELECT * FROM fn_stock_report($1, $2)", [
+  // Получаем данные из fn_stock_report
+  const res = await pool.query(`SELECT * FROM fn_stock_report($1, $2)`, [
     fromDate,
     toDate,
   ]);
