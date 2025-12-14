@@ -1,49 +1,64 @@
 const ExcelJS = require("exceljs");
 const pool = require("../db");
+const fs = require("fs");
 const path = require("path");
 
-module.exports = async function generateAdvancedStockReport() {
+async function generateStockReport() {
   const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Складской отчет");
 
-  // --- Лист "Отчёт по складу" ---
-  const sheet = workbook.addWorksheet("Отчёт по складу");
+  // Заголовки
+  sheet.columns = [
+    { header: "№", key: "index", width: 5 },
+    { header: "ID товара", key: "id", width: 10 },
+    { header: "Наименование", key: "name", width: 30 },
+    { header: "Категория", key: "category", width: 20 },
+    { header: "Остаток на складе", key: "quantity", width: 18 },
+    { header: "Минимальный остаток", key: "min_qty", width: 18 },
+    { header: "Статус", key: "status", width: 20 },
+  ];
 
-  // Шапка отчёта
-  sheet.mergeCells("A1:E1");
-  sheet.getCell("A1").value = "Отчёт по складу (последние 7 дней)";
-  sheet.getCell("A1").font = { bold: true, size: 14 };
-  sheet.getCell("A1").alignment = { horizontal: "center" };
+  sheet.getRow(1).font = { bold: true };
+  sheet.views = [{ state: "frozen", ySplit: 1 }];
 
-  // Заголовки колонок
-  sheet.addRow(["ID", "Товар", "Остаток", "Приход за неделю", "Списание за неделю"]);
-  sheet.getRow(2).font = { bold: true };
-  sheet.getRow(2).alignment = { horizontal: "center" };
-
-  // Получение данных
   const res = await pool.query(`
-    SELECT p.id, p.name,
-           COALESCE(s.quantity,0) AS stock,
-           COALESCE(SUM(i.quantity),0) AS income,
-           COALESCE(SUM(o.quantity),0) AS outcome
+    SELECT p.id, p.name, c.name AS category, COALESCE(s.quantity,0) AS quantity
     FROM products p
+    LEFT JOIN categories c ON p.category_id = c.id
     LEFT JOIN stock s ON s.product_id = p.id
-    LEFT JOIN income i ON i.product_id = p.id AND i.date >= NOW() - INTERVAL '7 days'
-    LEFT JOIN outcome o ON o.product_id = p.id AND o.date >= NOW() - INTERVAL '7 days'
-    GROUP BY p.id, p.name, s.quantity
-    ORDER BY p.name
+    ORDER BY p.id
   `);
 
-  res.rows.forEach((p) => {
-    sheet.addRow([p.id, p.name, p.stock, p.income, p.outcome]);
+  const MIN_QTY = 5;
+
+  res.rows.forEach((p, idx) => {
+    const status = p.quantity < MIN_QTY ? "⚠️ Низкий остаток" : "OK";
+    const row = sheet.addRow({
+      index: idx + 1,
+      id: p.id,
+      name: p.name,
+      category: p.category || "-",
+      quantity: p.quantity,
+      min_qty: MIN_QTY,
+      status,
+    });
+
+    // Цвет ячейки «Статус»
+    row.getCell("status").fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: p.quantity < MIN_QTY ? "FFFFC7CE" : "FFC6EFCE" },
+    };
   });
 
-  // Настройка ширины колонок
-  sheet.columns.forEach((col) => {
-    col.width = 15;
-  });
+  // Создаем папку reports, если нет
+  const reportsDir = path.join(__dirname, "../reports");
+  if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir);
 
-  // Сохраняем файл
-  const filePath = path.join(__dirname, "../reports/advanced_stock_report.xlsx");
+  const filePath = path.join(reportsDir, "stock_report.xlsx");
   await workbook.xlsx.writeFile(filePath);
+
   return filePath;
-};
+}
+
+module.exports = generateStockReport;
